@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.gamegeneration.platform.credit.CreditService;
 import com.gamegeneration.platform.membership.ProjectMembership;
 import com.gamegeneration.platform.membership.ProjectMembershipId;
 import com.gamegeneration.platform.membership.ProjectMembershipRepository;
@@ -21,7 +22,8 @@ class ProjectServiceTest {
 	private final ProjectRepository projects = mock(ProjectRepository.class);
 	private final ProjectMembershipRepository memberships = mock(ProjectMembershipRepository.class);
 	private final AppUserRepository users = mock(AppUserRepository.class);
-	private final ProjectService service = new ProjectService(projects, memberships, users);
+	private final CreditService credits = mock(CreditService.class);
+	private final ProjectService service = new ProjectService(projects, memberships, users, credits);
 
 	@Test
 	void createProjectAlsoCreatesOwnerMembership() {
@@ -34,6 +36,7 @@ class ProjectServiceTest {
 		assertThat(response.currentUserRole()).isEqualTo(ProjectRole.OWNER);
 		verify(projects).save(any(Project.class));
 		verify(memberships).save(any(ProjectMembership.class));
+		verify(credits).initialize(any(Project.class));
 	}
 
 	@Test

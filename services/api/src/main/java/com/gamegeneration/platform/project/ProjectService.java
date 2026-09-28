@@ -1,5 +1,6 @@
 package com.gamegeneration.platform.project;
 
+import com.gamegeneration.platform.credit.CreditService;
 import com.gamegeneration.platform.membership.ProjectMembership;
 import com.gamegeneration.platform.membership.ProjectMembershipId;
 import com.gamegeneration.platform.membership.ProjectMembershipRepository;
@@ -18,18 +19,21 @@ public class ProjectService {
 	private final ProjectRepository projects;
 	private final ProjectMembershipRepository memberships;
 	private final AppUserRepository users;
+	private final CreditService credits;
 
 	public ProjectService(ProjectRepository projects, ProjectMembershipRepository memberships,
-			AppUserRepository users) {
+			AppUserRepository users, CreditService credits) {
 		this.projects = projects;
 		this.memberships = memberships;
 		this.users = users;
+		this.credits = credits;
 	}
 
 	@Transactional
 	public ProjectApi.ProjectResponse create(AppUser actor, ProjectApi.CreateProjectRequest request) {
 		var project = projects.save(new Project(request.name().trim(), normalized(request.description()), actor));
 		var membership = memberships.save(new ProjectMembership(project, actor, ProjectRole.OWNER, actor));
+		credits.initialize(project);
 		return ProjectApi.ProjectResponse.from(project, membership.getRole());
 	}
 

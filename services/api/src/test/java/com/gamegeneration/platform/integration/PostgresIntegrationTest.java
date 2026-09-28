@@ -8,6 +8,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.gamegeneration.platform.auth.AccessInvitation;
 import com.gamegeneration.platform.auth.AccessInvitationRepository;
+import com.gamegeneration.platform.credit.CreditLedgerRepository;
+import com.gamegeneration.platform.credit.CreditMovementType;
+import com.gamegeneration.platform.credit.CreditService;
+import com.gamegeneration.platform.credit.InsufficientCreditsException;
+import com.gamegeneration.platform.credit.ProjectCreditAccountRepository;
 import com.gamegeneration.platform.membership.ProjectMembershipRepository;
 import com.gamegeneration.platform.generation.GenerationApi;
 import com.gamegeneration.platform.generation.GenerationEvents;
@@ -87,6 +92,9 @@ class PostgresIntegrationTest {
 	@Autowired ExportJobRepository exportJobs;
 	@Autowired ExportInboxEventRepository exportInbox;
 	@Autowired ContentPackExportResultProcessor exportResults;
+	@Autowired CreditService credits;
+	@Autowired ProjectCreditAccountRepository creditAccounts;
+	@Autowired CreditLedgerRepository creditLedger;
 	@Autowired tools.jackson.databind.ObjectMapper objectMapper;
 
 	@Test
@@ -97,7 +105,8 @@ class PostgresIntegrationTest {
 		assertThat(tables).contains("app_user", "access_invitation", "project", "project_membership",
 				"generation_job", "generation_attempt", "outbox_event", "inbox_event",
 				"content_version", "content_asset", "review_request", "review_assignment", "review_decision",
-				"content_pack", "content_pack_item", "export_job", "export_inbox_event");
+				"content_pack", "content_pack_item", "export_job", "export_inbox_event",
+				"project_credit_account", "credit_ledger");
 	}
 
 	@Test
@@ -250,6 +259,197 @@ class PostgresIntegrationTest {
 		assertThat(cancelled.contentVersion()).isNotNull();
 		assertThat(jdbc.queryForObject("select count(*) from content_version where source_generation_job_id = ?",
 				Integer.class, fixture.job().getId())).isEqualTo(1);
+	}
+
+	@Test
+	@Transactional
+	void generationSubmissionReservesCreditsAndDuplicateRequestDoesNotReserveAgain() {
+		var fixture = fixture("credit-reserve");
+		UUID requestId = UUID.randomUUID();
+		var first = generationService.create(fixture.actor(), fixture.projectId(),
+				new GenerationApi.CreateGenerationRequest(requestId, "Synthetic credit reservation"));
+		var duplicate = generationService.create(fixture.actor(), fixture.projectId(),
+				new GenerationApi.CreateGenerationRequest(requestId, "Synthetic credit reservation"));
+		creditAccounts.flush();
+
+		var balance = credits.balance(fixture.actor(), fixture.projectId());
+		assertThat(duplicate.id()).isEqualTo(first.id());
+		assertThat(balance.totalGranted()).isEqualTo(100);
+		assertThat(balance.reserved()).isEqualTo(10);
+		assertThat(balance.consumed()).isZero();
+		assertThat(balance.available()).isEqualTo(90);
+		assertThat(creditLedger.countByGenerationJobIdAndMovementType(first.id(), CreditMovementType.RESERVE))
+				.isEqualTo(1);
+	}
+
+	@Test
+	void insufficientCreditsRejectWithoutCreatingOrPartiallyReservingAJob() {
+		var fixture = fixture("credit-insufficient");
+		for (int index = 0; index < 10; index++) {
+			generationService.create(fixture.actor(), fixture.projectId(),
+					new GenerationApi.CreateGenerationRequest(UUID.randomUUID(), "Synthetic request " + index));
+		}
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> generationService.create(
+				fixture.actor(), fixture.projectId(),
+				new GenerationApi.CreateGenerationRequest(UUID.randomUUID(), "One request too many")))
+				.isInstanceOf(InsufficientCreditsException.class);
+		creditAccounts.flush();
+
+		var balance = credits.balance(fixture.actor(), fixture.projectId());
+		assertThat(balance.reserved()).isEqualTo(100);
+		assertThat(balance.available()).isZero();
+		assertThat(generationJobs.findAllByProjectIdOrderByCreatedAtDesc(fixture.projectId())).hasSize(10);
+	}
+
+	@Test
+	void concurrentReservationsNeverOverspendTheProject() throws Exception {
+		var fixture = fixture("credit-concurrent");
+		var start = new CountDownLatch(1);
+		try (var executor = Executors.newFixedThreadPool(12)) {
+			var futures = new java.util.ArrayList<java.util.concurrent.Future<Boolean>>();
+			for (int index = 0; index < 12; index++) {
+				int requestNumber = index;
+				futures.add(executor.submit(() -> {
+					start.await();
+					try {
+						generationService.create(fixture.actor(), fixture.projectId(),
+								new GenerationApi.CreateGenerationRequest(UUID.randomUUID(),
+										"Concurrent synthetic request " + requestNumber));
+						return true;
+					} catch (InsufficientCreditsException exception) {
+						return false;
+					}
+				}));
+			}
+			start.countDown();
+			long accepted = 0;
+			for (var future : futures) if (future.get()) accepted++;
+			assertThat(accepted).isEqualTo(10);
+		}
+
+		var balance = credits.balance(fixture.actor(), fixture.projectId());
+		assertThat(balance.reserved()).isEqualTo(100);
+		assertThat(balance.consumed()).isZero();
+		assertThat(balance.available()).isZero();
+		assertThat(generationJobs.findAllByProjectIdOrderByCreatedAtDesc(fixture.projectId())).hasSize(10);
+	}
+
+	@Test
+	@Transactional
+	void successCapturesOnceAcrossDuplicateResultDeliveries() throws Exception {
+		var fixture = jobFixture("credit-capture");
+		resultProcessor.process(success(fixture.job(), UUID.randomUUID()));
+		resultProcessor.process(success(fixture.job(), UUID.randomUUID()));
+		creditAccounts.flush();
+
+		var balance = credits.balance(fixture.actor(), fixture.projectId());
+		assertThat(balance.reserved()).isZero();
+		assertThat(balance.consumed()).isEqualTo(10);
+		assertThat(balance.available()).isEqualTo(90);
+		assertThat(creditLedger.countByGenerationJobIdAndMovementType(
+				fixture.job().getId(), CreditMovementType.CAPTURE)).isEqualTo(1);
+	}
+
+	@Test
+	@Transactional
+	void terminalFailureReleasesOnceAcrossDuplicateResultDeliveries() throws Exception {
+		var fixture = jobFixture("credit-failure-release");
+		resultProcessor.process(failure(fixture.job(), false, "PROVIDER_INVALID_REQUEST"));
+		resultProcessor.process(failure(fixture.job(), false, "PROVIDER_INVALID_REQUEST"));
+		creditAccounts.flush();
+
+		var balance = credits.balance(fixture.actor(), fixture.projectId());
+		assertThat(balance.reserved()).isZero();
+		assertThat(balance.consumed()).isZero();
+		assertThat(balance.available()).isEqualTo(100);
+		assertThat(creditLedger.countByGenerationJobIdAndMovementType(
+				fixture.job().getId(), CreditMovementType.RELEASE)).isEqualTo(1);
+	}
+
+	@Test
+	@Transactional
+	void cancellationReleasesReservedCredits() throws Exception {
+		var fixture = jobFixture("credit-cancel-release");
+		generationService.cancel(fixture.actor(), fixture.projectId(), fixture.job().getId());
+		resultProcessor.process(success(fixture.job(), UUID.randomUUID()));
+		creditAccounts.flush();
+
+		var balance = credits.balance(fixture.actor(), fixture.projectId());
+		assertThat(generationService.get(fixture.actor(), fixture.projectId(), fixture.job().getId()).status())
+				.isEqualTo("CANCELLED");
+		assertThat(balance.reserved()).isZero();
+		assertThat(balance.available()).isEqualTo(100);
+		assertThat(creditLedger.countByGenerationJobIdAndMovementType(
+				fixture.job().getId(), CreditMovementType.RELEASE)).isEqualTo(1);
+	}
+
+	@Test
+	@Transactional
+	void timeoutReleasesReservedCreditsExactlyOnce() {
+		var fixture = jobFixture("credit-timeout-release");
+		generationLifecycle.timeOutIfStale(fixture.job().getId(), Instant.now().plusSeconds(1));
+		generationLifecycle.timeOutIfStale(fixture.job().getId(), Instant.now().plusSeconds(1));
+		creditAccounts.flush();
+
+		var balance = credits.balance(fixture.actor(), fixture.projectId());
+		assertThat(balance.reserved()).isZero();
+		assertThat(balance.available()).isEqualTo(100);
+		assertThat(creditLedger.countByGenerationJobIdAndMovementType(
+				fixture.job().getId(), CreditMovementType.RELEASE)).isEqualTo(1);
+	}
+
+	@Test
+	void successAndTimeoutRaceSettlesCreditsExactlyOnce() throws Exception {
+		var fixture = jobFixture("credit-success-timeout-race");
+		String success = success(fixture.job(), UUID.randomUUID());
+		var start = new CountDownLatch(1);
+		try (var executor = Executors.newFixedThreadPool(2)) {
+			var result = executor.submit(() -> runAfter(start, () -> resultProcessor.process(success)));
+			var timeout = executor.submit(() -> runAfter(start, () -> generationLifecycle.timeOutIfStale(
+					fixture.job().getId(), Instant.now().plusSeconds(1))));
+			start.countDown();
+			result.get();
+			timeout.get();
+		}
+		assertSingleCreditSettlement(fixture);
+	}
+
+	@Test
+	void successAndCancellationRaceSettlesCreditsExactlyOnce() throws Exception {
+		var fixture = jobFixture("credit-success-cancel-race");
+		String success = success(fixture.job(), UUID.randomUUID());
+		var start = new CountDownLatch(1);
+		try (var executor = Executors.newFixedThreadPool(2)) {
+			var result = executor.submit(() -> runAfter(start, () -> resultProcessor.process(success)));
+			var cancellation = executor.submit(() -> runAfter(start, () -> generationService.cancel(
+					fixture.actor(), fixture.projectId(), fixture.job().getId())));
+			start.countDown();
+			result.get();
+			cancellation.get();
+		}
+		var status = generationService.get(fixture.actor(), fixture.projectId(), fixture.job().getId()).status();
+		if (status.equals("CANCEL_REQUESTED")) {
+			generationLifecycle.cancelIfGraceElapsed(fixture.job().getId(), Instant.now().plusSeconds(1));
+		}
+		assertSingleCreditSettlement(fixture);
+	}
+
+	@Test
+	@Transactional
+	void reviewerAndViewerCanReadCreditsButCannotConsumeThem() {
+		var fixture = fixture("credit-roles");
+		var reviewer = newUser("credit-reviewer");
+		var viewer = newUser("credit-viewer");
+		projectService.putMember(fixture.actor(), fixture.projectId(), reviewer.getId(), ProjectRole.REVIEWER);
+		projectService.putMember(fixture.actor(), fixture.projectId(), viewer.getId(), ProjectRole.VIEWER);
+
+		assertThat(credits.balance(reviewer, fixture.projectId()).available()).isEqualTo(100);
+		assertThat(credits.recentLedger(viewer, fixture.projectId()).entries()).hasSize(1);
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> generationService.create(
+				reviewer, fixture.projectId(),
+				new GenerationApi.CreateGenerationRequest(UUID.randomUUID(), "Not authorized")))
+				.isInstanceOf(ForbiddenException.class);
 	}
 
 	@Test
@@ -472,9 +672,10 @@ class PostgresIntegrationTest {
 	}
 
 	private String success(com.gamegeneration.platform.generation.GenerationJob job, UUID eventId) {
-		var attempt = job.getActiveAttempt();
+		var attempt = jdbc.queryForMap("select id, execution_key from generation_attempt where job_id = ? "
+				+ "order by attempt_number desc limit 1", job.getId());
 		var event = new GenerationEvents.Succeeded(eventId, GenerationEvents.SUCCEEDED, 1,
-				Instant.now(), job.getId(), attempt.getId(), attempt.getExecutionKey(), "GEMINI",
+				Instant.now(), job.getId(), (UUID) attempt.get("id"), (UUID) attempt.get("execution_key"), "GEMINI",
 				"test-model", "worker-success", "Synthetic Success",
 				objectMapper.readTree("{\"synopsis\":\"Safe late fixture\"}"), List.of());
 		return objectMapper.writeValueAsString(event);
@@ -490,6 +691,26 @@ class PostgresIntegrationTest {
 		} catch (ConflictException exception) {
 			return "closed";
 		}
+	}
+
+	private String runAfter(CountDownLatch start, CheckedOperation operation) throws Exception {
+		start.await();
+		operation.run();
+		return "completed";
+	}
+
+	private void assertSingleCreditSettlement(JobFixture fixture) {
+		var response = generationService.get(fixture.actor(), fixture.projectId(), fixture.job().getId());
+		var balance = credits.balance(fixture.actor(), fixture.projectId());
+		long captures = creditLedger.countByGenerationJobIdAndMovementType(
+				fixture.job().getId(), CreditMovementType.CAPTURE);
+		long releases = creditLedger.countByGenerationJobIdAndMovementType(
+				fixture.job().getId(), CreditMovementType.RELEASE);
+		assertThat(response.status()).isIn("SUCCEEDED", "CANCELLED", "TIMED_OUT");
+		assertThat(captures + releases).isEqualTo(1);
+		assertThat(balance.reserved()).isZero();
+		assertThat(balance.consumed()).isIn(0L, 10L);
+		assertThat(balance.available() + balance.consumed()).isEqualTo(100);
 	}
 
 	private ReviewFixture reviewFixture(String suffix, int reviewerCount) throws Exception {
@@ -566,4 +787,5 @@ class PostgresIntegrationTest {
 	private record ApprovedVersionFixture(AppUser owner, List<AppUser> reviewers,
 			UUID projectId, UUID versionId) {}
 	private record ReadyPackFixture(AppUser owner, UUID projectId, UUID packId) {}
+	@FunctionalInterface private interface CheckedOperation { void run() throws Exception; }
 }

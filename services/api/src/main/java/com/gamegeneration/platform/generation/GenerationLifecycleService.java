@@ -1,5 +1,6 @@
 package com.gamegeneration.platform.generation;
 
+import com.gamegeneration.platform.credit.CreditService;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -8,9 +9,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class GenerationLifecycleService {
 	private final GenerationJobRepository jobs;
+	private final CreditService credits;
 
-	public GenerationLifecycleService(GenerationJobRepository jobs) {
+	public GenerationLifecycleService(GenerationJobRepository jobs, CreditService credits) {
 		this.jobs = jobs;
+		this.credits = credits;
 	}
 
 	@Transactional
@@ -20,6 +23,7 @@ public class GenerationLifecycleService {
 				|| !job.getUpdatedAt().isBefore(cutoff)) return;
 		if (job.getActiveAttempt() != null) job.getActiveAttempt().timeOut();
 		job.timeOut();
+		credits.release(job);
 	}
 
 	@Transactional
@@ -29,5 +33,6 @@ public class GenerationLifecycleService {
 				|| job.getCancelRequestedAt() == null || !job.getCancelRequestedAt().isBefore(cutoff)) return;
 		if (job.getActiveAttempt() != null) job.getActiveAttempt().cancel();
 		job.cancel();
+		credits.release(job);
 	}
 }

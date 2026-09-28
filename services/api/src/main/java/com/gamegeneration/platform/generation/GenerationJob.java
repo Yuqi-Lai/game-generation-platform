@@ -34,6 +34,7 @@ public class GenerationJob {
 	@Column(name = "request_idempotency_key", nullable = false) private UUID requestIdempotencyKey;
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "retry_of_job_id") private GenerationJob retryOfJob;
+	@Column(name = "credit_cost", nullable = false) private long creditCost;
 	@Enumerated(EnumType.STRING) @Column(nullable = false)
 	private GenerationJobStatus status;
 	@OneToOne(fetch = FetchType.LAZY)
@@ -53,13 +54,14 @@ public class GenerationJob {
 	protected GenerationJob() {}
 
 	public GenerationJob(Project project, AppUser requestedBy, String requestPrompt,
-			UUID requestIdempotencyKey, GenerationJob retryOfJob) {
+			UUID requestIdempotencyKey, GenerationJob retryOfJob, long creditCost) {
 		this.id = UUID.randomUUID();
 		this.project = project;
 		this.requestedBy = requestedBy;
 		this.requestPrompt = requestPrompt;
 		this.requestIdempotencyKey = requestIdempotencyKey;
 		this.retryOfJob = retryOfJob;
+		this.creditCost = creditCost;
 		this.status = GenerationJobStatus.QUEUED;
 	}
 
@@ -112,6 +114,7 @@ public class GenerationJob {
 	public String getRequestPrompt() { return requestPrompt; }
 	public UUID getRequestIdempotencyKey() { return requestIdempotencyKey; }
 	public GenerationJob getRetryOfJob() { return retryOfJob; }
+	public long getCreditCost() { return creditCost; }
 	public GenerationJobStatus getStatus() { return status; }
 	public GenerationAttempt getActiveAttempt() { return activeAttempt; }
 	public ContentVersion getResultContentVersion() { return resultContentVersion; }

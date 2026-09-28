@@ -2,6 +2,8 @@ package com.gamegeneration.platform.generation;
 
 import tools.jackson.databind.ObjectMapper;
 import com.gamegeneration.platform.content.ContentAssetRepository;
+import com.gamegeneration.platform.credit.CreditProperties;
+import com.gamegeneration.platform.credit.CreditService;
 import com.gamegeneration.platform.membership.ProjectMembershipId;
 import com.gamegeneration.platform.membership.ProjectMembershipRepository;
 import com.gamegeneration.platform.outbox.OutboxEvent;
@@ -27,12 +29,15 @@ public class GenerationService {
 	private final ContentAssetRepository assets;
 	private final OutboxEventRepository outbox;
 	private final GenerationProperties properties;
+	private final CreditProperties creditProperties;
+	private final CreditService credits;
 	private final ObjectMapper objectMapper;
 
 	public GenerationService(ProjectRepository projects, ProjectMembershipRepository memberships,
 			GenerationJobRepository jobs, GenerationAttemptRepository attempts,
 			ContentAssetRepository assets, OutboxEventRepository outbox,
-			GenerationProperties properties, ObjectMapper objectMapper) {
+			GenerationProperties properties, CreditProperties creditProperties,
+			CreditService credits, ObjectMapper objectMapper) {
 		this.projects = projects;
 		this.memberships = memberships;
 		this.jobs = jobs;
@@ -40,6 +45,8 @@ public class GenerationService {
 		this.assets = assets;
 		this.outbox = outbox;
 		this.properties = properties;
+		this.creditProperties = creditProperties;
+		this.credits = credits;
 		this.objectMapper = objectMapper;
 	}
 
@@ -93,7 +100,9 @@ public class GenerationService {
 
 	private GenerationApi.GenerationJobResponse createJob(com.gamegeneration.platform.project.Project project,
 			AppUser actor, String prompt, UUID requestId, GenerationJob retryOf) {
-		var job = jobs.saveAndFlush(new GenerationJob(project, actor, prompt, requestId, retryOf));
+		var job = jobs.saveAndFlush(new GenerationJob(project, actor, prompt, requestId, retryOf,
+				creditProperties.generationCost()));
+		credits.reserve(job);
 		var attempt = attempts.saveAndFlush(new GenerationAttempt(job, 1, "GEMINI"));
 		job.activate(attempt);
 		enqueueAttempt(job, attempt, properties.requestTopic());

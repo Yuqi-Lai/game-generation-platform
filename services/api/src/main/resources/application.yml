@@ -72,3 +72,7 @@ app:
     request-topic: ${KAFKA_PACK_EXPORT_REQUEST_TOPIC:content-pack.export.requested.v1}
     result-topic: ${KAFKA_PACK_EXPORT_RESULT_TOPIC:content-pack.export.results.v1}
     artifact-bucket: ${S3_BUCKET:forge-generation-assets}
+  credits:
+    initial-project-grant: ${CREDIT_INITIAL_PROJECT_GRANT:100}
+    generation-cost: ${CREDIT_GENERATION_COST:10}
+    ledger-limit: ${CREDIT_LEDGER_LIMIT:50}

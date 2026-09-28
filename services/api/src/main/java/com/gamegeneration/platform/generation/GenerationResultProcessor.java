@@ -6,6 +6,7 @@ import com.gamegeneration.platform.content.ContentAsset;
 import com.gamegeneration.platform.content.ContentAssetRepository;
 import com.gamegeneration.platform.content.ContentVersion;
 import com.gamegeneration.platform.content.ContentVersionRepository;
+import com.gamegeneration.platform.credit.CreditService;
 import com.gamegeneration.platform.inbox.InboxEvent;
 import com.gamegeneration.platform.inbox.InboxEventRepository;
 import com.gamegeneration.platform.outbox.OutboxEvent;
@@ -30,13 +31,14 @@ public class GenerationResultProcessor {
 	private final GenerationProperties properties;
 	private final GenerationService generationService;
 	private final ContentReviewService contentReviews;
+	private final CreditService credits;
 
 	public GenerationResultProcessor(ObjectMapper objectMapper, InboxEventRepository inbox,
 			GenerationJobRepository jobs, GenerationAttemptRepository attempts,
 			ProjectRepository projects, ContentVersionRepository versions,
 			ContentAssetRepository assets, OutboxEventRepository outbox,
 			GenerationProperties properties, GenerationService generationService,
-			ContentReviewService contentReviews) {
+			ContentReviewService contentReviews, CreditService credits) {
 		this.objectMapper = objectMapper;
 		this.inbox = inbox;
 		this.jobs = jobs;
@@ -48,6 +50,7 @@ public class GenerationResultProcessor {
 		this.properties = properties;
 		this.generationService = generationService;
 		this.contentReviews = contentReviews;
+		this.credits = credits;
 	}
 
 	@Transactional
@@ -77,6 +80,7 @@ public class GenerationResultProcessor {
 		if (job.getStatus() == GenerationJobStatus.CANCEL_REQUESTED) {
 			attempt.cancel();
 			job.cancel();
+			credits.release(job);
 			record(eventId, event.eventType(), job, attempt, "CANCELLED", "Worker started after cancellation request");
 			return;
 		}
@@ -94,6 +98,7 @@ public class GenerationResultProcessor {
 		if (job.getStatus() == GenerationJobStatus.CANCEL_REQUESTED) {
 			attempt.cancel();
 			job.cancel();
+			credits.release(job);
 			record(eventId, event.eventType(), job, attempt, "CANCELLED_LATE_RESULT",
 					"Success ignored because cancellation was requested");
 			return;
@@ -117,6 +122,7 @@ public class GenerationResultProcessor {
 		}
 		attempt.succeed(event.model(), event.workerExecutionId());
 		job.succeed(version);
+		credits.capture(job);
 		record(eventId, event.eventType(), job, attempt, "ACCEPTED", null);
 	}
 
@@ -129,6 +135,7 @@ public class GenerationResultProcessor {
 		attempt.fail(event.model(), event.workerExecutionId(), event.failureCode(), event.failureMessage(), event.retryable());
 		if (job.getStatus() == GenerationJobStatus.CANCEL_REQUESTED) {
 			job.cancel();
+			credits.release(job);
 			record(eventId, event.eventType(), job, attempt, "CANCELLED", "Failure received after cancellation request");
 			return;
 		}
@@ -141,6 +148,7 @@ public class GenerationResultProcessor {
 		}
 		if (job.getStatus() == GenerationJobStatus.QUEUED) job.markRunning();
 		job.fail(event.failureCode(), event.failureMessage());
+		credits.release(job);
 		if (event.retryable()) publishDeadLetter(job, attempt, event);
 		record(eventId, event.eventType(), job, attempt,
 				event.retryable() ? "RETRIES_EXHAUSTED" : "NON_RETRYABLE_FAILURE", null);
