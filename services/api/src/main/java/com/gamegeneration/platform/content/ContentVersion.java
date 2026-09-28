@@ -58,6 +58,14 @@ public class ContentVersion {
 	}
 	@PrePersist void prePersist() { createdAt = updatedAt = Instant.now(); }
 	@PreUpdate void preUpdate() { updatedAt = Instant.now(); }
+	public void submitForReview() { transitionTo(ContentVersionStatus.IN_REVIEW); }
+	public void approve() { transitionTo(ContentVersionStatus.APPROVED); }
+	public void requestChanges() { transitionTo(ContentVersionStatus.CHANGES_REQUESTED); }
+	public void supersede() { transitionTo(ContentVersionStatus.SUPERSEDED); }
+	private void transitionTo(ContentVersionStatus next) {
+		ContentVersionTransitions.require(status, next);
+		status = next;
+	}
 	public UUID getId() { return id; }
 	public Project getProject() { return project; }
 	public GenerationJob getSourceGenerationJob() { return sourceGenerationJob; }
@@ -65,5 +73,8 @@ public class ContentVersion {
 	public ContentVersionStatus getStatus() { return status; }
 	public String getTitle() { return title; }
 	public String getStructuredContent() { return structuredContent; }
+	public AppUser getCreatedBy() { return createdBy; }
 	public Instant getCreatedAt() { return createdAt; }
+	public Instant getUpdatedAt() { return updatedAt; }
+	public long getVersion() { return version; }
 }

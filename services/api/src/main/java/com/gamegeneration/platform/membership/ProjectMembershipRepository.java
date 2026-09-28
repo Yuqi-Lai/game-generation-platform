@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface ProjectMembershipRepository extends JpaRepository<ProjectMembership, ProjectMembershipId> {
 	List<ProjectMembership> findAllByIdProjectIdOrderByCreatedAtAsc(UUID projectId);
+	List<ProjectMembership> findAllByIdProjectIdAndRoleOrderByCreatedAtAsc(UUID projectId, ProjectRole role);
 
 	long countByIdProjectIdAndRole(UUID projectId, ProjectRole role);
 

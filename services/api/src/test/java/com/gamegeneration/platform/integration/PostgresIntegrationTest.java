@@ -18,11 +18,21 @@ import com.gamegeneration.platform.generation.GenerationService;
 import com.gamegeneration.platform.project.ProjectRepository;
 import com.gamegeneration.platform.project.ProjectApi;
 import com.gamegeneration.platform.project.ProjectService;
+import com.gamegeneration.platform.project.ProjectRole;
+import com.gamegeneration.platform.review.ContentReviewApi;
+import com.gamegeneration.platform.review.ContentReviewService;
+import com.gamegeneration.platform.review.ReviewDecisionRepository;
+import com.gamegeneration.platform.review.ReviewDecisionType;
+import com.gamegeneration.platform.review.ReviewRequestRepository;
+import com.gamegeneration.platform.shared.ConflictException;
+import com.gamegeneration.platform.shared.ForbiddenException;
 import com.gamegeneration.platform.user.AppUser;
 import com.gamegeneration.platform.user.AppUserRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -60,6 +70,9 @@ class PostgresIntegrationTest {
 	@Autowired GenerationResultProcessor resultProcessor;
 	@Autowired GenerationJobRepository generationJobs;
 	@Autowired GenerationLifecycleService generationLifecycle;
+	@Autowired ContentReviewService contentReviews;
+	@Autowired ReviewRequestRepository reviewRequests;
+	@Autowired ReviewDecisionRepository reviewDecisions;
 	@Autowired tools.jackson.databind.ObjectMapper objectMapper;
 
 	@Test
@@ -69,7 +82,7 @@ class PostgresIntegrationTest {
 				String.class);
 		assertThat(tables).contains("app_user", "access_invitation", "project", "project_membership",
 				"generation_job", "generation_attempt", "outbox_event", "inbox_event",
-				"content_version", "content_asset");
+				"content_version", "content_asset", "review_request", "review_assignment", "review_decision");
 	}
 
 	@Test
@@ -224,6 +237,108 @@ class PostgresIntegrationTest {
 				Integer.class, fixture.job().getId())).isEqualTo(1);
 	}
 
+	@Test
+	@Transactional
+	void repeatedSubmitAndDuplicateDecisionAreIdempotent() throws Exception {
+		var fixture = reviewFixture("review-idempotency", 1);
+		UUID submitId = UUID.randomUUID();
+		var first = contentReviews.submit(fixture.owner(), fixture.projectId(), fixture.versionId(),
+				new ContentReviewApi.SubmitReviewRequest(submitId));
+		var repeated = contentReviews.submit(fixture.owner(), fixture.projectId(), fixture.versionId(),
+				new ContentReviewApi.SubmitReviewRequest(submitId));
+		UUID decisionId = UUID.randomUUID();
+		contentReviews.decide(fixture.reviewers().getFirst(), fixture.projectId(), fixture.versionId(),
+				first.reviewRequest().id(), ReviewDecisionType.APPROVE,
+				new ContentReviewApi.DecisionRequest(decisionId, "Ready to ship."));
+		contentReviews.decide(fixture.reviewers().getFirst(), fixture.projectId(), fixture.versionId(),
+				first.reviewRequest().id(), ReviewDecisionType.APPROVE,
+				new ContentReviewApi.DecisionRequest(decisionId, "Ready to ship."));
+
+		assertThat(repeated.reviewRequest().id()).isEqualTo(first.reviewRequest().id());
+		assertThat(reviewRequests.countByContentVersionId(fixture.versionId())).isEqualTo(1);
+		assertThat(reviewDecisions.countByReviewRequestId(first.reviewRequest().id())).isEqualTo(1);
+		assertThat(contentReviews.getVersion(fixture.owner(), fixture.projectId(), fixture.versionId()).status())
+				.isEqualTo("APPROVED");
+	}
+
+	@Test
+	void concurrentApproveAndRequestChangesResolveWithoutCorruption() throws Exception {
+		var fixture = reviewFixture("review-race", 2);
+		var submitted = contentReviews.submit(fixture.owner(), fixture.projectId(), fixture.versionId(),
+				new ContentReviewApi.SubmitReviewRequest(UUID.randomUUID()));
+		var start = new CountDownLatch(1);
+		try (var executor = Executors.newFixedThreadPool(2)) {
+			var approve = executor.submit(() -> decideAfter(start, fixture.reviewers().get(0), fixture,
+					submitted.reviewRequest().id(), ReviewDecisionType.APPROVE));
+			var changes = executor.submit(() -> decideAfter(start, fixture.reviewers().get(1), fixture,
+					submitted.reviewRequest().id(), ReviewDecisionType.REQUEST_CHANGES));
+			start.countDown();
+			assertThat(List.of(approve.get(), changes.get())).allMatch(result ->
+					result.equals("accepted") || result.equals("closed"));
+		}
+
+		var version = contentReviews.getVersion(fixture.owner(), fixture.projectId(), fixture.versionId());
+		assertThat(version.status()).isEqualTo("CHANGES_REQUESTED");
+		assertThat(reviewDecisions.countByReviewRequestId(submitted.reviewRequest().id())).isBetween(1L, 2L);
+	}
+
+	@Test
+	@Transactional
+	void newerVersionSupersedesOpenReviewAndRejectsStaleApproval() throws Exception {
+		var fixture = reviewFixture("review-superseded", 1);
+		var submitted = contentReviews.submit(fixture.owner(), fixture.projectId(), fixture.versionId(),
+				new ContentReviewApi.SubmitReviewRequest(UUID.randomUUID()));
+		var newerVersionId = generateVersion(fixture.owner(), fixture.projectId(), "newer-draft");
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> contentReviews.decide(
+				fixture.reviewers().getFirst(), fixture.projectId(), fixture.versionId(),
+				submitted.reviewRequest().id(), ReviewDecisionType.APPROVE,
+				new ContentReviewApi.DecisionRequest(UUID.randomUUID(), null)))
+				.isInstanceOf(ConflictException.class);
+		assertThat(contentReviews.getVersion(fixture.owner(), fixture.projectId(), fixture.versionId()).status())
+				.isEqualTo("SUPERSEDED");
+		assertThat(contentReviews.getVersion(fixture.owner(), fixture.projectId(), newerVersionId).status())
+				.isEqualTo("DRAFT");
+	}
+
+	@Test
+	@Transactional
+	void approvedVersionRemainsApprovedWhenNewerVersionIsCreated() throws Exception {
+		var fixture = reviewFixture("review-approved", 1);
+		var submitted = contentReviews.submit(fixture.owner(), fixture.projectId(), fixture.versionId(),
+				new ContentReviewApi.SubmitReviewRequest(UUID.randomUUID()));
+		contentReviews.decide(fixture.reviewers().getFirst(), fixture.projectId(), fixture.versionId(),
+				submitted.reviewRequest().id(), ReviewDecisionType.APPROVE,
+				new ContentReviewApi.DecisionRequest(UUID.randomUUID(), "Approved."));
+		var newerVersionId = generateVersion(fixture.owner(), fixture.projectId(), "approved-newer");
+
+		assertThat(contentReviews.getVersion(fixture.owner(), fixture.projectId(), fixture.versionId()).status())
+				.isEqualTo("APPROVED");
+		assertThat(contentReviews.getVersion(fixture.owner(), fixture.projectId(), newerVersionId).status())
+				.isEqualTo("DRAFT");
+	}
+
+	@Test
+	@Transactional
+	void projectRolesAuthorizeSubmitAndDecisions() throws Exception {
+		var fixture = reviewFixture("review-roles", 1);
+		var editor = newUser("editor");
+		var viewer = newUser("viewer");
+		projectService.putMember(fixture.owner(), fixture.projectId(), editor.getId(), ProjectRole.EDITOR);
+		projectService.putMember(fixture.owner(), fixture.projectId(), viewer.getId(), ProjectRole.VIEWER);
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> contentReviews.submit(
+				viewer, fixture.projectId(), fixture.versionId(),
+				new ContentReviewApi.SubmitReviewRequest(UUID.randomUUID())))
+				.isInstanceOf(ForbiddenException.class);
+		var submitted = contentReviews.submit(editor, fixture.projectId(), fixture.versionId(),
+				new ContentReviewApi.SubmitReviewRequest(UUID.randomUUID()));
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> contentReviews.decide(
+				editor, fixture.projectId(), fixture.versionId(), submitted.reviewRequest().id(),
+				ReviewDecisionType.APPROVE, new ContentReviewApi.DecisionRequest(UUID.randomUUID(), null)))
+				.isInstanceOf(ForbiddenException.class);
+	}
+
 	private String failure(com.gamegeneration.platform.generation.GenerationJob job,
 			boolean retryable, String code) {
 		var attempt = job.getActiveAttempt();
@@ -240,6 +355,49 @@ class PostgresIntegrationTest {
 				"test-model", "worker-success", "Synthetic Success",
 				objectMapper.readTree("{\"synopsis\":\"Safe late fixture\"}"), List.of());
 		return objectMapper.writeValueAsString(event);
+	}
+
+	private String decideAfter(CountDownLatch start, AppUser reviewer, ReviewFixture fixture,
+			UUID reviewRequestId, ReviewDecisionType type) throws InterruptedException {
+		start.await();
+		try {
+			contentReviews.decide(reviewer, fixture.projectId(), fixture.versionId(), reviewRequestId,
+					type, new ContentReviewApi.DecisionRequest(UUID.randomUUID(), "Concurrent fixture"));
+			return "accepted";
+		} catch (ConflictException exception) {
+			return "closed";
+		}
+	}
+
+	private ReviewFixture reviewFixture(String suffix, int reviewerCount) throws Exception {
+		var owner = newUser(suffix + "-owner");
+		var project = projectService.create(owner,
+				new ProjectApi.CreateProjectRequest("Synthetic " + suffix, null));
+		var reviewers = new java.util.ArrayList<AppUser>();
+		for (int index = 0; index < reviewerCount; index++) {
+			var reviewer = newUser(suffix + "-reviewer-" + index);
+			projectService.putMember(owner, project.id(), reviewer.getId(), ProjectRole.REVIEWER);
+			reviewers.add(reviewer);
+		}
+		return new ReviewFixture(owner, reviewers, project.id(), generateVersion(owner, project.id(), suffix));
+	}
+
+	private UUID generateVersion(AppUser actor, UUID projectId, String suffix) throws Exception {
+		var response = generationService.create(actor, projectId,
+				new GenerationApi.CreateGenerationRequest(UUID.randomUUID(), "Synthetic " + suffix));
+		var attempt = jdbc.queryForMap("select id, execution_key from generation_attempt where job_id = ?",
+				response.id());
+		var event = new GenerationEvents.Succeeded(UUID.randomUUID(), GenerationEvents.SUCCEEDED, 1,
+				Instant.now(), response.id(), (UUID) attempt.get("id"), (UUID) attempt.get("execution_key"),
+				"GEMINI", "test-model", "worker-success", "Synthetic Success",
+				objectMapper.readTree("{\"synopsis\":\"Safe late fixture\"}"), List.of());
+		resultProcessor.process(objectMapper.writeValueAsString(event));
+		return generationService.get(actor, projectId, response.id()).contentVersion().id();
+	}
+
+	private AppUser newUser(String suffix) {
+		return users.saveAndFlush(new AppUser("https://auth.invalid/", "github|" + suffix + UUID.randomUUID(),
+				suffix + "@example.test", true, suffix));
 	}
 
 	private JobFixture jobFixture(String suffix) {
@@ -261,4 +419,5 @@ class PostgresIntegrationTest {
 	private record Fixture(AppUser actor, UUID projectId) {}
 	private record JobFixture(AppUser actor, UUID projectId,
 			com.gamegeneration.platform.generation.GenerationJob job) {}
+	private record ReviewFixture(AppUser owner, List<AppUser> reviewers, UUID projectId, UUID versionId) {}
 }

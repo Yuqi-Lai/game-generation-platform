@@ -1,5 +1,9 @@
 package com.gamegeneration.platform.content;
 
 public enum ContentVersionStatus {
-	DRAFT
+	DRAFT,
+	IN_REVIEW,
+	APPROVED,
+	CHANGES_REQUESTED,
+	SUPERSEDED
 }

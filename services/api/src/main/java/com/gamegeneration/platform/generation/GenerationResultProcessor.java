@@ -11,6 +11,7 @@ import com.gamegeneration.platform.inbox.InboxEventRepository;
 import com.gamegeneration.platform.outbox.OutboxEvent;
 import com.gamegeneration.platform.outbox.OutboxEventRepository;
 import com.gamegeneration.platform.project.ProjectRepository;
+import com.gamegeneration.platform.review.ContentReviewService;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -28,12 +29,14 @@ public class GenerationResultProcessor {
 	private final OutboxEventRepository outbox;
 	private final GenerationProperties properties;
 	private final GenerationService generationService;
+	private final ContentReviewService contentReviews;
 
 	public GenerationResultProcessor(ObjectMapper objectMapper, InboxEventRepository inbox,
 			GenerationJobRepository jobs, GenerationAttemptRepository attempts,
 			ProjectRepository projects, ContentVersionRepository versions,
 			ContentAssetRepository assets, OutboxEventRepository outbox,
-			GenerationProperties properties, GenerationService generationService) {
+			GenerationProperties properties, GenerationService generationService,
+			ContentReviewService contentReviews) {
 		this.objectMapper = objectMapper;
 		this.inbox = inbox;
 		this.jobs = jobs;
@@ -44,6 +47,7 @@ public class GenerationResultProcessor {
 		this.outbox = outbox;
 		this.properties = properties;
 		this.generationService = generationService;
+		this.contentReviews = contentReviews;
 	}
 
 	@Transactional
@@ -98,6 +102,7 @@ public class GenerationResultProcessor {
 		var version = versions.findBySourceGenerationJobId(job.getId()).orElseGet(() -> {
 			var project = projects.findForUpdate(job.getProject().getId())
 					.orElseThrow(() -> new IllegalArgumentException("Project no longer exists"));
+			contentReviews.supersedeOpenReviews(project.getId());
 			int nextVersion = versions.findMaxVersionNumber(project.getId()) + 1;
 			String title = event.title().substring(0, Math.min(200, event.title().length()));
 			return versions.saveAndFlush(new ContentVersion(project, job, nextVersion, title,
