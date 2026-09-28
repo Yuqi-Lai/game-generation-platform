@@ -1,0 +1,12 @@
+services:
+  api:
+    environment:
+      AUTH0_ISSUER_URI: https://credits-load-test.invalid/
+      AUTH0_JWK_SET_URI: https://credits-load-test.invalid/unused-jwks
+      AUTH0_AUDIENCE: https://api.game-generation.local
+      BOOTSTRAP_INVITED_EMAILS: loadtest@example.test
+      CREDIT_INITIAL_PROJECT_GRANT: "100"
+      CREDIT_GENERATION_COST: "10"
+      LOAD_TEST_AUTH_ENABLED: "true"
+      LOAD_TEST_AUTH_SECRET: credits-load-test-secret-only-32-characters
+      OUTBOX_PUBLISH_DELAY_MS: "1000"

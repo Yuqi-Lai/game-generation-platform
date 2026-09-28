@@ -1,6 +1,8 @@
 package com.gamegeneration.platform.auth;
 
 import java.util.ArrayList;
+import java.nio.charset.StandardCharsets;
+import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -15,6 +17,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -39,8 +42,19 @@ public class SecurityConfig {
 	JwtDecoder jwtDecoder(
 			@Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuer,
 			@Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri,
+			@Value("${app.load-test.auth-enabled:false}") boolean loadTestAuthEnabled,
+			@Value("${app.load-test.auth-secret:}") String loadTestAuthSecret,
 			AuthProperties properties) {
-		NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+		NimbusJwtDecoder decoder;
+		if (loadTestAuthEnabled) {
+			if (loadTestAuthSecret.length() < 32) {
+				throw new IllegalStateException("Load-test JWT secret must contain at least 32 characters");
+			}
+			var key = new SecretKeySpec(loadTestAuthSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+			decoder = NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
+		} else {
+			decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+		}
 		OAuth2TokenValidator<Jwt> issuerValidator = new JwtIssuerValidator(issuer);
 		OAuth2TokenValidator<Jwt> audienceValidator = new JwtClaimValidator<>("aud",
 				audiences -> audiences instanceof java.util.Collection<?> values

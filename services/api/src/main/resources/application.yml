@@ -76,3 +76,6 @@ app:
     initial-project-grant: ${CREDIT_INITIAL_PROJECT_GRANT:100}
     generation-cost: ${CREDIT_GENERATION_COST:10}
     ledger-limit: ${CREDIT_LEDGER_LIMIT:50}
+  load-test:
+    auth-enabled: ${LOAD_TEST_AUTH_ENABLED:false}
+    auth-secret: ${LOAD_TEST_AUTH_SECRET:}
