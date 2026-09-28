@@ -21,6 +21,16 @@ export interface ProjectMember {
   joinedAt: string;
 }
 
+export interface ProjectCreditBalance {
+  projectId: string;
+  totalGranted: number;
+  reserved: number;
+  consumed: number;
+  available: number;
+  generationCost: number;
+  updatedAt: string;
+}
+
 export type GenerationJobStatus =
   | "QUEUED"
   | "RUNNING"

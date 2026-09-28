@@ -4,7 +4,7 @@ import { ApiError, apiFetch } from "@/lib/api";
 import { GenerateContentForm } from "@/components/generate-content-form";
 import { ContentVersionReview } from "@/components/content-version-review";
 import { ContentPackManager } from "@/components/content-pack-manager";
-import type { ContentPack, ContentVersion, Project, ProjectMember } from "@/lib/types";
+import type { ContentPack, ContentVersion, Project, ProjectCreditBalance, ProjectMember } from "@/lib/types";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,6 +18,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const members = await apiFetch<ProjectMember[]>(`/api/v1/projects/${encodeURIComponent(id)}/members`);
   const versions = await apiFetch<ContentVersion[]>(`/api/v1/projects/${encodeURIComponent(id)}/content-versions`);
   const packs = await apiFetch<ContentPack[]>(`/api/v1/projects/${encodeURIComponent(id)}/content-packs`);
+  const credits = await apiFetch<ProjectCreditBalance>(`/api/v1/projects/${encodeURIComponent(id)}/credits`);
 
   return (
     <>
@@ -37,6 +38,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <article className="panel">
           <p className="eyebrow">Generate content</p>
           <h2>Start a draft</h2>
+          <div className="credit-balance" aria-label="Project credit balance">
+            <span><strong>{credits.available}</strong> available</span>
+            <span><strong>{credits.reserved}</strong> reserved</span>
+            <span><strong>{credits.consumed}</strong> consumed</span>
+          </div>
+          <p className="credit-cost">Each generation reserves {credits.generationCost} credits.</p>
           {project.currentUserRole === "OWNER" || project.currentUserRole === "EDITOR" ? (
             <GenerateContentForm projectId={project.id} />
           ) : (

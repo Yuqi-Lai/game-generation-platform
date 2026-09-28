@@ -110,6 +110,9 @@ h2 { font-family: Georgia, "Times New Roman", serif; font-size: 1.7rem; font-wei
 .member-list strong { color: var(--muted); font-size: .7rem; letter-spacing: .08em; }
 
 .generation-form { display: grid; gap: .7rem; }
+.credit-balance { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: .5rem; }
+.credit-balance span { border: 1px solid var(--line); border-radius: 999px; font-size: .85rem; padding: .35rem .65rem; }
+.credit-cost { color: var(--muted); font-size: .85rem; margin: 0 0 1rem; }
 .generation-form label { font-size: .85rem; font-weight: 800; }
 .generation-form textarea { background: white; border: 1px solid #c9c5b9; border-radius: 9px; color: var(--ink); padding: .85rem 1rem; resize: vertical; }
 .generation-form textarea:focus { border-color: var(--forest); outline: 2px solid #203b2a25; }
