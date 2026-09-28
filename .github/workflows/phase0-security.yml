@@ -1,0 +1,26 @@
+name: Phase 0 security
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  current-tree-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check current tree and legacy isolation
+        run: python3 scripts/security_scan.py
+
+      - name: Scan current tree with Gitleaks
+        run: >-
+          docker run --rm
+          -v "$PWD:/repo"
+          ghcr.io/gitleaks/gitleaks:v8.24.3
+          detect --source=/repo --no-git --redact --exit-code=1

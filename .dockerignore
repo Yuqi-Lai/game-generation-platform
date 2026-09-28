@@ -1,0 +1,12 @@
+# The legacy prototype is reference and characterization material only.
+legacy/
+
+.git/
+.github/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+tests/
+
