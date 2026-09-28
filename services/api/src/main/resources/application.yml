@@ -38,6 +38,6 @@ management:
 app:
   auth:
     audience: ${AUTH0_AUDIENCE:https://api.game-generation.local}
+    bootstrap-invited-emails: ${BOOTSTRAP_INVITED_EMAILS:}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
-
