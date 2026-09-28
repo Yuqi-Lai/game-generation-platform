@@ -9,6 +9,7 @@ from .contracts import (
     ResultEvent,
 )
 from .generator import GenerationOutput
+from .failures import classify_failure
 
 
 class Generator(Protocol):
@@ -28,7 +29,7 @@ class GenerationExecutor:
         self._storage = storage
         self._model_name = model_name
 
-    def execute(self, command: GenerationExecutionRequested) -> ResultEvent:
+    def execute(self, command: GenerationExecutionRequested, worker_execution_id: str) -> ResultEvent:
         result_key = f"{command.output_prefix}/result-event.json"
         previous = self._storage.get_json(result_key)
         if previous:
@@ -49,6 +50,7 @@ class GenerationExecutor:
                 attempt_id=command.attempt_id,
                 execution_key=command.execution_key,
                 model=output.model,
+                worker_execution_id=worker_execution_id,
                 title=output.content.title,
                 content=output.content.model_dump(mode="json"),
                 assets=[
@@ -72,14 +74,16 @@ class GenerationExecutor:
                 ],
             )
         except Exception as error:
-            message = str(error) or error.__class__.__name__
+            failure = classify_failure(error)
             event = GenerationExecutionFailed(
                 job_id=command.job_id,
                 attempt_id=command.attempt_id,
                 execution_key=command.execution_key,
                 model=self._model_name,
-                failure_code="GENERATION_FAILED",
-                failure_message=message[:2000],
+                worker_execution_id=worker_execution_id,
+                failure_code=failure.code,
+                failure_message=failure.message,
+                retryable=failure.retryable,
             )
 
         self._storage.put_json(result_key, event.model_dump(mode="json", by_alias=True))

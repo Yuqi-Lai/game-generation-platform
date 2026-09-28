@@ -1,4 +1,5 @@
 from uuid import uuid4
+import httpx
 
 from generation_worker.contracts import (
     Character,
@@ -65,6 +66,7 @@ def command() -> GenerationExecutionRequested:
         attemptId=uuid4(),
         executionKey=uuid4(),
         projectId=uuid4(),
+        attemptNumber=1,
         prompt="Create an original clockwork adventure.",
         outputPrefix="projects/test/jobs/test/attempts/test",
     )
@@ -76,8 +78,8 @@ def test_success_stores_assets_and_reuses_result_for_duplicate_command():
     executor = GenerationExecutor(generator, storage, "fake")
     request = command()
 
-    first = executor.execute(request)
-    second = executor.execute(request)
+    first = executor.execute(request, "worker-1")
+    second = executor.execute(request, "worker-2")
 
     assert first.event_id == second.event_id
     assert first.event_type == "GenerationExecutionSucceeded"
@@ -85,3 +87,35 @@ def test_success_stores_assets_and_reuses_result_for_duplicate_command():
     assert generator.calls == 1
     assert f"{request.output_prefix}/content.json" in storage.values
     assert f"{request.output_prefix}/cover.png" in storage.values
+
+
+class FailingGenerator:
+    def __init__(self, error: Exception):
+        self.error = error
+
+    def generate(self, prompt: str):
+        raise self.error
+
+
+def test_transient_network_failure_is_retryable():
+    event = GenerationExecutor(
+        FailingGenerator(httpx.ConnectError("temporary network failure")),
+        MemoryStorage(),
+        "fake",
+    ).execute(command(), "worker-network")
+
+    assert event.event_type == "GenerationExecutionFailed"
+    assert event.retryable is True
+    assert event.failure_code == "PROVIDER_NETWORK_ERROR"
+
+
+def test_deterministic_validation_failure_is_not_retryable():
+    event = GenerationExecutor(
+        FailingGenerator(ValueError("invalid generated structure")),
+        MemoryStorage(),
+        "fake",
+    ).execute(command(), "worker-validation")
+
+    assert event.event_type == "GenerationExecutionFailed"
+    assert event.retryable is False
+    assert event.failure_code == "GENERATION_VALIDATION_FAILED"

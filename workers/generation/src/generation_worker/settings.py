@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_request_topic: str = "generation.execution.requested.v1"
+    kafka_retry_topic: str = "generation.execution.retry.v1"
     kafka_result_topic: str = "generation.execution.results.v1"
     kafka_consumer_group: str = "generation-worker-v1"
     kafka_security_protocol: str = "PLAINTEXT"
