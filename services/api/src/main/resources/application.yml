@@ -23,6 +23,7 @@ spring:
           jwk-set-uri: ${AUTH0_JWK_SET_URI:https://auth.invalid/.well-known/jwks.json}
 
 server:
+  port: ${PORT:8080}
   forward-headers-strategy: framework
 
 management:
