@@ -16,6 +16,14 @@ import com.gamegeneration.platform.generation.GenerationLifecycleService;
 import com.gamegeneration.platform.generation.GenerationResultProcessor;
 import com.gamegeneration.platform.generation.GenerationService;
 import com.gamegeneration.platform.project.ProjectRepository;
+import com.gamegeneration.platform.pack.ContentPackApi;
+import com.gamegeneration.platform.pack.ContentPackExportResultProcessor;
+import com.gamegeneration.platform.pack.ContentPackEvents;
+import com.gamegeneration.platform.pack.ContentPackItemRepository;
+import com.gamegeneration.platform.pack.ContentPackRepository;
+import com.gamegeneration.platform.pack.ContentPackService;
+import com.gamegeneration.platform.pack.ExportInboxEventRepository;
+import com.gamegeneration.platform.pack.ExportJobRepository;
 import com.gamegeneration.platform.project.ProjectApi;
 import com.gamegeneration.platform.project.ProjectService;
 import com.gamegeneration.platform.project.ProjectRole;
@@ -73,6 +81,12 @@ class PostgresIntegrationTest {
 	@Autowired ContentReviewService contentReviews;
 	@Autowired ReviewRequestRepository reviewRequests;
 	@Autowired ReviewDecisionRepository reviewDecisions;
+	@Autowired ContentPackService contentPacks;
+	@Autowired ContentPackRepository packRepository;
+	@Autowired ContentPackItemRepository packItems;
+	@Autowired ExportJobRepository exportJobs;
+	@Autowired ExportInboxEventRepository exportInbox;
+	@Autowired ContentPackExportResultProcessor exportResults;
 	@Autowired tools.jackson.databind.ObjectMapper objectMapper;
 
 	@Test
@@ -82,7 +96,8 @@ class PostgresIntegrationTest {
 				String.class);
 		assertThat(tables).contains("app_user", "access_invitation", "project", "project_membership",
 				"generation_job", "generation_attempt", "outbox_event", "inbox_event",
-				"content_version", "content_asset", "review_request", "review_assignment", "review_decision");
+				"content_version", "content_asset", "review_request", "review_assignment", "review_decision",
+				"content_pack", "content_pack_item", "export_job", "export_inbox_event");
 	}
 
 	@Test
@@ -339,6 +354,114 @@ class PostgresIntegrationTest {
 				.isInstanceOf(ForbiddenException.class);
 	}
 
+	@Test
+	@Transactional
+	void packRejectsCrossProjectAndNonApprovedVersionsAndDeduplicatesItems() throws Exception {
+		var fixture = approvedVersionFixture("pack-validation");
+		var pack = contentPacks.create(fixture.owner(), fixture.projectId(),
+				new ContentPackApi.CreatePackRequest("Synthetic Pack"));
+		var draft = generateVersion(fixture.owner(), fixture.projectId(), "pack-draft");
+		var other = approvedVersionFixture("pack-other-project");
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> contentPacks.addItem(
+				fixture.owner(), fixture.projectId(), pack.id(), new ContentPackApi.AddItemRequest(draft)))
+				.isInstanceOf(ConflictException.class);
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> contentPacks.addItem(
+				fixture.owner(), fixture.projectId(), pack.id(), new ContentPackApi.AddItemRequest(other.versionId())))
+				.isInstanceOf(ConflictException.class);
+		contentPacks.addItem(fixture.owner(), fixture.projectId(), pack.id(),
+				new ContentPackApi.AddItemRequest(fixture.versionId()));
+		contentPacks.addItem(fixture.owner(), fixture.projectId(), pack.id(),
+				new ContentPackApi.AddItemRequest(fixture.versionId()));
+
+		assertThat(packItems.countByContentPackId(pack.id())).isEqualTo(1);
+	}
+
+	@Test
+	@Transactional
+	void readyPackIsImmutableAndNewerVersionsDoNotChangeItsSnapshot() throws Exception {
+		var fixture = approvedVersionFixture("pack-immutable");
+		var pack = contentPacks.create(fixture.owner(), fixture.projectId(),
+				new ContentPackApi.CreatePackRequest("Immutable Pack"));
+		contentPacks.addItem(fixture.owner(), fixture.projectId(), pack.id(),
+				new ContentPackApi.AddItemRequest(fixture.versionId()));
+		contentPacks.ready(fixture.owner(), fixture.projectId(), pack.id());
+		var newer = generateVersion(fixture.owner(), fixture.projectId(), "newer-pack-version");
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> contentPacks.removeItem(
+				fixture.owner(), fixture.projectId(), pack.id(), fixture.versionId()))
+				.isInstanceOf(ConflictException.class);
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> contentPacks.addItem(
+				fixture.owner(), fixture.projectId(), pack.id(), new ContentPackApi.AddItemRequest(newer)))
+				.isInstanceOf(ConflictException.class);
+		var persisted = contentPacks.get(fixture.owner(), fixture.projectId(), pack.id());
+		assertThat(persisted.items()).extracting(ContentPackApi.ItemResponse::contentVersionId)
+				.containsExactly(fixture.versionId());
+	}
+
+	@Test
+	@Transactional
+	void successfulExportAndDuplicateResultAreIdempotent() throws Exception {
+		var fixture = readyPackFixture("pack-export-success");
+		var exporting = contentPacks.startExport(fixture.owner(), fixture.projectId(), fixture.packId(),
+				new ContentPackApi.StartExportRequest(UUID.randomUUID()));
+		var job = exportJobs.findByContentPackId(fixture.packId()).orElseThrow();
+		UUID eventId = UUID.randomUUID();
+		var event = new ContentPackEvents.Succeeded(eventId, ContentPackEvents.SUCCEEDED, 1, Instant.now(),
+				job.getId(), fixture.packId(), job.getExecutionKey(), "export-worker", "forge-generation-assets",
+				job.getArtifactKey(), "application/zip", 512, "b".repeat(64));
+		String payload = objectMapper.writeValueAsString(event);
+
+		exportResults.process(payload);
+		exportResults.process(payload);
+
+		var completed = contentPacks.get(fixture.owner(), fixture.projectId(), fixture.packId());
+		assertThat(exporting.status()).isEqualTo("EXPORTING");
+		assertThat(completed.status()).isEqualTo("EXPORTED");
+		assertThat(completed.exportJob().sha256()).isEqualTo("b".repeat(64));
+		assertThat(completed.exportJob().artifactUri()).isEqualTo(
+				"s3://forge-generation-assets/" + job.getArtifactKey());
+		assertThat(exportInbox.countByExportJobId(job.getId())).isEqualTo(1);
+		assertThat(packItems.countByContentPackId(fixture.packId())).isEqualTo(1);
+	}
+
+	@Test
+	@Transactional
+	void terminalExportFailureIsPersisted() throws Exception {
+		var fixture = readyPackFixture("pack-export-failure");
+		contentPacks.startExport(fixture.owner(), fixture.projectId(), fixture.packId(),
+				new ContentPackApi.StartExportRequest(UUID.randomUUID()));
+		var job = exportJobs.findByContentPackId(fixture.packId()).orElseThrow();
+		var event = new ContentPackEvents.Failed(UUID.randomUUID(), ContentPackEvents.FAILED, 1, Instant.now(),
+				job.getId(), fixture.packId(), job.getExecutionKey(), "export-worker",
+				"PACK_EXPORT_FAILED", "Synthetic storage failure");
+
+		exportResults.process(objectMapper.writeValueAsString(event));
+
+		var failed = contentPacks.get(fixture.owner(), fixture.projectId(), fixture.packId());
+		assertThat(failed.status()).isEqualTo("FAILED");
+		assertThat(failed.exportJob().failureMessage()).isEqualTo("Synthetic storage failure");
+	}
+
+	@Test
+	@Transactional
+	void packAuthorizationIsEditorWriteAndReviewerViewerReadOnly() throws Exception {
+		var fixture = approvedVersionFixture("pack-roles");
+		var editor = newUser("pack-editor");
+		var viewer = newUser("pack-viewer");
+		projectService.putMember(fixture.owner(), fixture.projectId(), editor.getId(), ProjectRole.EDITOR);
+		projectService.putMember(fixture.owner(), fixture.projectId(), viewer.getId(), ProjectRole.VIEWER);
+		var pack = contentPacks.create(editor, fixture.projectId(), new ContentPackApi.CreatePackRequest("Editor Pack"));
+
+		assertThat(contentPacks.get(viewer, fixture.projectId(), pack.id()).id()).isEqualTo(pack.id());
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> contentPacks.addItem(
+				viewer, fixture.projectId(), pack.id(), new ContentPackApi.AddItemRequest(fixture.versionId())))
+				.isInstanceOf(ForbiddenException.class);
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> contentPacks.create(
+				fixture.reviewers().getFirst(), fixture.projectId(), new ContentPackApi.CreatePackRequest("No")))
+				.isInstanceOf(ForbiddenException.class);
+	}
+
 	private String failure(com.gamegeneration.platform.generation.GenerationJob job,
 			boolean retryable, String code) {
 		var attempt = job.getActiveAttempt();
@@ -400,6 +523,26 @@ class PostgresIntegrationTest {
 				suffix + "@example.test", true, suffix));
 	}
 
+	private ApprovedVersionFixture approvedVersionFixture(String suffix) throws Exception {
+		var fixture = reviewFixture(suffix, 1);
+		var submitted = contentReviews.submit(fixture.owner(), fixture.projectId(), fixture.versionId(),
+				new ContentReviewApi.SubmitReviewRequest(UUID.randomUUID()));
+		contentReviews.decide(fixture.reviewers().getFirst(), fixture.projectId(), fixture.versionId(),
+				submitted.reviewRequest().id(), ReviewDecisionType.APPROVE,
+				new ContentReviewApi.DecisionRequest(UUID.randomUUID(), "Approved for pack fixture"));
+		return new ApprovedVersionFixture(fixture.owner(), fixture.reviewers(), fixture.projectId(), fixture.versionId());
+	}
+
+	private ReadyPackFixture readyPackFixture(String suffix) throws Exception {
+		var fixture = approvedVersionFixture(suffix);
+		var pack = contentPacks.create(fixture.owner(), fixture.projectId(),
+				new ContentPackApi.CreatePackRequest("Ready " + suffix));
+		contentPacks.addItem(fixture.owner(), fixture.projectId(), pack.id(),
+				new ContentPackApi.AddItemRequest(fixture.versionId()));
+		contentPacks.ready(fixture.owner(), fixture.projectId(), pack.id());
+		return new ReadyPackFixture(fixture.owner(), fixture.projectId(), pack.id());
+	}
+
 	private JobFixture jobFixture(String suffix) {
 		var fixture = fixture(suffix);
 		var response = generationService.create(fixture.actor(), fixture.projectId(),
@@ -420,4 +563,7 @@ class PostgresIntegrationTest {
 	private record JobFixture(AppUser actor, UUID projectId,
 			com.gamegeneration.platform.generation.GenerationJob job) {}
 	private record ReviewFixture(AppUser owner, List<AppUser> reviewers, UUID projectId, UUID versionId) {}
+	private record ApprovedVersionFixture(AppUser owner, List<AppUser> reviewers,
+			UUID projectId, UUID versionId) {}
+	private record ReadyPackFixture(AppUser owner, UUID projectId, UUID packId) {}
 }

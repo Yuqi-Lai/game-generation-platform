@@ -68,3 +68,7 @@ app:
     cancellation-grace-seconds: ${GENERATION_CANCELLATION_GRACE_SECONDS:5}
     sweep-delay-ms: ${GENERATION_SWEEP_DELAY_MS:5000}
     outbox-publish-delay-ms: ${OUTBOX_PUBLISH_DELAY_MS:1000}
+  content-pack:
+    request-topic: ${KAFKA_PACK_EXPORT_REQUEST_TOPIC:content-pack.export.requested.v1}
+    result-topic: ${KAFKA_PACK_EXPORT_RESULT_TOPIC:content-pack.export.results.v1}
+    artifact-bucket: ${S3_BUCKET:forge-generation-assets}
