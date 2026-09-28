@@ -2,6 +2,7 @@ import logging
 
 from .consumer import GenerationConsumer
 from .executor import GenerationExecutor
+from .export_executor import ContentPackExportExecutor
 from .generator import GeminiGenerator
 from .settings import Settings
 from .storage import S3Storage
@@ -18,7 +19,7 @@ def main() -> None:
         storage,
         f"{settings.gemini_text_model}+{settings.gemini_image_model}",
     )
-    GenerationConsumer(settings, executor).run()
+    GenerationConsumer(settings, executor, ContentPackExportExecutor(storage)).run()
 
 
 if __name__ == "__main__":

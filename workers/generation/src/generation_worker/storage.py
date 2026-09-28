@@ -27,9 +27,9 @@ class S3Storage:
                 raise
             self._client.create_bucket(Bucket=self.bucket)
 
-    def get_json(self, key: str) -> dict[str, Any] | None:
+    def get_json(self, key: str, bucket: str | None = None) -> dict[str, Any] | None:
         try:
-            response = self._client.get_object(Bucket=self.bucket, Key=key)
+            response = self._client.get_object(Bucket=bucket or self.bucket, Key=key)
         except ClientError as error:
             if error.response.get("Error", {}).get("Code") in {"NoSuchKey", "404", "NotFound"}:
                 return None
@@ -39,7 +39,13 @@ class S3Storage:
     def put_bytes(self, key: str, body: bytes, content_type: str) -> None:
         self._client.put_object(Bucket=self.bucket, Key=key, Body=body, ContentType=content_type)
 
-    def put_json(self, key: str, value: dict[str, Any]) -> bytes:
+    def get_bytes(self, bucket: str, key: str) -> bytes:
+        return self._client.get_object(Bucket=bucket, Key=key)["Body"].read()
+
+    def put_object(self, bucket: str, key: str, body: bytes, content_type: str) -> None:
+        self._client.put_object(Bucket=bucket, Key=key, Body=body, ContentType=content_type)
+
+    def put_json(self, key: str, value: dict[str, Any], bucket: str | None = None) -> bytes:
         body = json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode()
-        self.put_bytes(key, body, "application/json")
+        self.put_object(bucket or self.bucket, key, body, "application/json")
         return body

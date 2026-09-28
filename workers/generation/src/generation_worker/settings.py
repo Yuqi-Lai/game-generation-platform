@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     kafka_retry_topic: str = "generation.execution.retry.v1"
     kafka_result_topic: str = "generation.execution.results.v1"
     kafka_consumer_group: str = "generation-worker-v1"
+    kafka_pack_export_request_topic: str = "content-pack.export.requested.v1"
+    kafka_pack_export_result_topic: str = "content-pack.export.results.v1"
     kafka_security_protocol: str = "PLAINTEXT"
     kafka_sasl_mechanism: str | None = None
     kafka_sasl_username: str | None = None
