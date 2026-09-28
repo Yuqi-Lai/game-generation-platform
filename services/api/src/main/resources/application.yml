@@ -21,6 +21,22 @@ spring:
         jwt:
           issuer-uri: ${AUTH0_ISSUER_URI:https://auth.invalid/}
           jwk-set-uri: ${AUTH0_JWK_SET_URI:https://auth.invalid/.well-known/jwks.json}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_RESULT_CONSUMER_GROUP:platform-api-generation-results-v1}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: true
+        acks: all
+    listener:
+      ack-mode: record
 
 server:
   port: ${PORT:8080}
@@ -42,3 +58,7 @@ app:
     bootstrap-invited-emails: ${BOOTSTRAP_INVITED_EMAILS:}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  generation:
+    request-topic: ${KAFKA_GENERATION_REQUEST_TOPIC:generation.execution.requested.v1}
+    result-topic: ${KAFKA_GENERATION_RESULT_TOPIC:generation.execution.results.v1}
+    outbox-publish-delay-ms: ${OUTBOX_PUBLISH_DELAY_MS:1000}
