@@ -24,5 +24,8 @@ secrets*.yml
 
 # JavaScript dependencies and browser test output
 node_modules/
+target/
+.next/
+coverage/
 test-results/
 playwright-report/

@@ -13,7 +13,16 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKIP_PARTS = {".git", "node_modules", ".pytest_cache", "test-results", "playwright-report"}
+SKIP_PARTS = {
+    ".git",
+    ".next",
+    ".pytest_cache",
+    "coverage",
+    "node_modules",
+    "target",
+    "test-results",
+    "playwright-report",
+}
 
 PATTERNS = {
     "Google API key": re.compile(rb"AIza[0-9A-Za-z_-]{30,}"),
@@ -75,4 +84,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

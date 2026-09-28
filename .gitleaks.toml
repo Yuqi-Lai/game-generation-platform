@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Generated dependency and build output"
+paths = [
+  '''(^|/)(\.next|node_modules|target)(/|$)''',
+]

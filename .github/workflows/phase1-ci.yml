@@ -1,0 +1,59 @@
+name: Phase 1 CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: services/api/pom.xml
+      - name: Unit and PostgreSQL integration tests
+        run: ./mvnw --batch-mode verify
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      API_BASE_URL: http://localhost:8080
+      APP_BASE_URL: http://localhost:3000
+      AUTH0_DOMAIN: example.auth0.com
+      AUTH0_CLIENT_ID: ci-client
+      AUTH0_CLIENT_SECRET: ci-client-secret
+      AUTH0_AUDIENCE: https://api.game-generation.local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - name: Production build
+        run: AUTH0_SECRET="$(printf '0%.0s' {1..64})" npm run build
+
+  legacy-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify preserved demo relocation
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest tests.test_legacy_smoke

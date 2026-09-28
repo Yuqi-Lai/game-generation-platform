@@ -24,3 +24,4 @@ jobs:
           -v "$PWD:/repo"
           ghcr.io/gitleaks/gitleaks:v8.24.3
           detect --source=/repo --no-git --redact --exit-code=1
+          --config=/repo/.gitleaks.toml
