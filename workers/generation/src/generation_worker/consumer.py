@@ -1,7 +1,7 @@
 import json
 import logging
 
-from confluent_kafka import Consumer, Producer
+from confluent_kafka import Consumer, KafkaError, Producer
 
 from .contracts import GenerationExecutionRequested
 from .executor import GenerationExecutor
@@ -33,16 +33,30 @@ class GenerationConsumer:
                 if message is None:
                     continue
                 if message.error():
+                    if message.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
+                        LOGGER.warning("generation request topic is not available yet; retrying")
+                        continue
                     raise RuntimeError(str(message.error()))
                 command = GenerationExecutionRequested.model_validate_json(message.value())
                 result = self._executor.execute(command)
                 payload = result.model_dump_json(by_alias=True)
+                delivery_error: list[Exception] = []
+
+                def delivered(error, _message) -> None:
+                    if error is not None:
+                        delivery_error.append(RuntimeError(str(error)))
+
                 self._producer.produce(
                     self._result_topic,
                     key=str(command.job_id),
                     value=payload,
+                    on_delivery=delivered,
                 )
-                self._producer.flush(30)
+                remaining = self._producer.flush(30)
+                if remaining or delivery_error:
+                    raise delivery_error[0] if delivery_error else RuntimeError(
+                        f"{remaining} generation result event(s) were not delivered"
+                    )
                 self._consumer.commit(message=message, asynchronous=False)
                 LOGGER.info("published %s for job %s", result.event_type, command.job_id)
         finally:
