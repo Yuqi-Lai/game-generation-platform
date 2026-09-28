@@ -31,6 +31,9 @@ public class GenerationJob {
 	private AppUser requestedBy;
 	@Column(name = "request_prompt", nullable = false, columnDefinition = "text")
 	private String requestPrompt;
+	@Column(name = "request_idempotency_key", nullable = false) private UUID requestIdempotencyKey;
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "retry_of_job_id") private GenerationJob retryOfJob;
 	@Enumerated(EnumType.STRING) @Column(nullable = false)
 	private GenerationJobStatus status;
 	@OneToOne(fetch = FetchType.LAZY)
@@ -44,39 +47,71 @@ public class GenerationJob {
 	@Column(name = "created_at", nullable = false) private Instant createdAt;
 	@Column(name = "updated_at", nullable = false) private Instant updatedAt;
 	@Column(name = "completed_at") private Instant completedAt;
+	@Column(name = "cancel_requested_at") private Instant cancelRequestedAt;
 	@Version @Column(name = "row_version", nullable = false) private long version;
 
 	protected GenerationJob() {}
 
-	public GenerationJob(Project project, AppUser requestedBy, String requestPrompt) {
+	public GenerationJob(Project project, AppUser requestedBy, String requestPrompt,
+			UUID requestIdempotencyKey, GenerationJob retryOfJob) {
 		this.id = UUID.randomUUID();
 		this.project = project;
 		this.requestedBy = requestedBy;
 		this.requestPrompt = requestPrompt;
+		this.requestIdempotencyKey = requestIdempotencyKey;
+		this.retryOfJob = retryOfJob;
 		this.status = GenerationJobStatus.QUEUED;
 	}
 
 	@PrePersist void prePersist() { createdAt = updatedAt = Instant.now(); }
 	@PreUpdate void preUpdate() { updatedAt = Instant.now(); }
 	public void activate(GenerationAttempt attempt) { activeAttempt = attempt; }
+	public void markRunning() { transitionTo(GenerationJobStatus.RUNNING); }
+	public void requeue(GenerationAttempt attempt) {
+		transitionTo(GenerationJobStatus.QUEUED);
+		activeAttempt = attempt;
+	}
 	public void succeed(ContentVersion contentVersion) {
-		status = GenerationJobStatus.SUCCEEDED;
+		transitionTo(GenerationJobStatus.SUCCEEDED);
 		resultContentVersion = contentVersion;
 		completedAt = Instant.now();
 		failureCode = null;
 		failureMessage = null;
 	}
 	public void fail(String code, String message) {
-		status = GenerationJobStatus.FAILED;
+		transitionTo(GenerationJobStatus.FAILED);
 		failureCode = code;
 		failureMessage = message;
 		completedAt = Instant.now();
+	}
+	public void requestCancellation() {
+		if (status.isTerminal() || status == GenerationJobStatus.CANCEL_REQUESTED) return;
+		transitionTo(GenerationJobStatus.CANCEL_REQUESTED);
+		cancelRequestedAt = Instant.now();
+	}
+	public void cancel() {
+		if (status == GenerationJobStatus.CANCELLED) return;
+		transitionTo(GenerationJobStatus.CANCELLED);
+		completedAt = Instant.now();
+	}
+	public void timeOut() {
+		if (status == GenerationJobStatus.TIMED_OUT) return;
+		transitionTo(GenerationJobStatus.TIMED_OUT);
+		failureCode = "GENERATION_TIMED_OUT";
+		failureMessage = "Generation did not complete before the configured timeout.";
+		completedAt = Instant.now();
+	}
+	private void transitionTo(GenerationJobStatus next) {
+		GenerationJobTransitions.require(status, next);
+		status = next;
 	}
 
 	public UUID getId() { return id; }
 	public Project getProject() { return project; }
 	public AppUser getRequestedBy() { return requestedBy; }
 	public String getRequestPrompt() { return requestPrompt; }
+	public UUID getRequestIdempotencyKey() { return requestIdempotencyKey; }
+	public GenerationJob getRetryOfJob() { return retryOfJob; }
 	public GenerationJobStatus getStatus() { return status; }
 	public GenerationAttempt getActiveAttempt() { return activeAttempt; }
 	public ContentVersion getResultContentVersion() { return resultContentVersion; }
@@ -85,5 +120,6 @@ public class GenerationJob {
 	public Instant getCreatedAt() { return createdAt; }
 	public Instant getUpdatedAt() { return updatedAt; }
 	public Instant getCompletedAt() { return completedAt; }
+	public Instant getCancelRequestedAt() { return cancelRequestedAt; }
 	public long getVersion() { return version; }
 }

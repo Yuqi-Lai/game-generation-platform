@@ -60,5 +60,11 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
   generation:
     request-topic: ${KAFKA_GENERATION_REQUEST_TOPIC:generation.execution.requested.v1}
+    retry-topic: ${KAFKA_GENERATION_RETRY_TOPIC:generation.execution.retry.v1}
     result-topic: ${KAFKA_GENERATION_RESULT_TOPIC:generation.execution.results.v1}
+    dlq-topic: ${KAFKA_GENERATION_DLQ_TOPIC:generation.execution.dlq.v1}
+    max-attempts: ${GENERATION_MAX_ATTEMPTS:3}
+    timeout-seconds: ${GENERATION_TIMEOUT_SECONDS:900}
+    cancellation-grace-seconds: ${GENERATION_CANCELLATION_GRACE_SECONDS:5}
+    sweep-delay-ms: ${GENERATION_SWEEP_DELAY_MS:5000}
     outbox-publish-delay-ms: ${OUTBOX_PUBLISH_DELAY_MS:1000}

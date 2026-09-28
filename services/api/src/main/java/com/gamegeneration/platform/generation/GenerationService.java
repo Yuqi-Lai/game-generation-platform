@@ -46,27 +46,69 @@ public class GenerationService {
 	@Transactional
 	public GenerationApi.GenerationJobResponse create(AppUser actor, UUID projectId,
 			GenerationApi.CreateGenerationRequest request) {
-		var membership = memberships.findById(new ProjectMembershipId(projectId, actor.getId()))
-				.orElseThrow(() -> new NotFoundException("Project not found"));
-		if (membership.getRole() != ProjectRole.OWNER && membership.getRole() != ProjectRole.EDITOR) {
-			throw new ForbiddenException("Editor access is required to generate content");
-		}
-		var project = projects.findById(projectId).orElseThrow(() -> new NotFoundException("Project not found"));
+		requireEditor(actor, projectId);
+		var existing = jobs.findByProjectIdAndRequestedByIdAndRequestIdempotencyKey(
+				projectId, actor.getId(), request.requestId());
+		if (existing.isPresent()) return response(existing.get());
+		var project = projects.findForUpdate(projectId).orElseThrow(() -> new NotFoundException("Project not found"));
+		existing = jobs.findByProjectIdAndRequestedByIdAndRequestIdempotencyKey(
+				projectId, actor.getId(), request.requestId());
+		if (existing.isPresent()) return response(existing.get());
 		if (project.getStatus() != ProjectStatus.ACTIVE) {
 			throw new ConflictException("Archived projects cannot generate content");
 		}
+		return createJob(project, actor, request.prompt().trim(), request.requestId(), null);
+	}
 
-		var job = jobs.saveAndFlush(new GenerationJob(project, actor, request.prompt().trim()));
+	@Transactional
+	public GenerationApi.GenerationJobResponse retry(AppUser actor, UUID projectId, UUID jobId,
+			GenerationApi.RetryGenerationRequest request) {
+		requireEditor(actor, projectId);
+		var existing = jobs.findByProjectIdAndRequestedByIdAndRequestIdempotencyKey(
+				projectId, actor.getId(), request.requestId());
+		if (existing.isPresent()) return response(existing.get());
+		var source = jobs.findForUpdate(jobId).orElseThrow(() -> new NotFoundException("Generation job not found"));
+		if (!source.getProject().getId().equals(projectId)) throw new NotFoundException("Generation job not found");
+		if (source.getStatus() != GenerationJobStatus.FAILED && source.getStatus() != GenerationJobStatus.TIMED_OUT) {
+			throw new ConflictException("Only failed or timed-out jobs can be retried");
+		}
+		var project = projects.findForUpdate(projectId).orElseThrow(() -> new NotFoundException("Project not found"));
+		existing = jobs.findByProjectIdAndRequestedByIdAndRequestIdempotencyKey(
+				projectId, actor.getId(), request.requestId());
+		if (existing.isPresent()) return response(existing.get());
+		if (project.getStatus() != ProjectStatus.ACTIVE) {
+			throw new ConflictException("Archived projects cannot generate content");
+		}
+		return createJob(project, actor, source.getRequestPrompt(), request.requestId(), source);
+	}
+
+	@Transactional
+	public GenerationApi.GenerationJobResponse cancel(AppUser actor, UUID projectId, UUID jobId) {
+		requireEditor(actor, projectId);
+		var job = jobs.findForUpdate(jobId).orElseThrow(() -> new NotFoundException("Generation job not found"));
+		if (!job.getProject().getId().equals(projectId)) throw new NotFoundException("Generation job not found");
+		job.requestCancellation();
+		return response(job);
+	}
+
+	private GenerationApi.GenerationJobResponse createJob(com.gamegeneration.platform.project.Project project,
+			AppUser actor, String prompt, UUID requestId, GenerationJob retryOf) {
+		var job = jobs.saveAndFlush(new GenerationJob(project, actor, prompt, requestId, retryOf));
 		var attempt = attempts.saveAndFlush(new GenerationAttempt(job, 1, "GEMINI"));
 		job.activate(attempt);
+		enqueueAttempt(job, attempt, properties.requestTopic());
+		return response(job);
+	}
 
+	void enqueueAttempt(GenerationJob job, GenerationAttempt attempt, String topic) {
 		UUID eventId = UUID.randomUUID();
 		var event = new GenerationEvents.Requested(eventId, GenerationEvents.REQUESTED, 1, Instant.now(),
-				job.getId(), attempt.getId(), attempt.getExecutionKey(), projectId, job.getRequestPrompt(),
-				"projects/%s/generation-jobs/%s/attempts/%s".formatted(projectId, job.getId(), attempt.getId()));
+				job.getId(), attempt.getId(), attempt.getExecutionKey(), job.getProject().getId(),
+				attempt.getAttemptNumber(), job.getRequestPrompt(),
+				"projects/%s/generation-jobs/%s/attempts/%s".formatted(
+						job.getProject().getId(), job.getId(), attempt.getId()));
 		outbox.save(new OutboxEvent(eventId, "GenerationJob", job.getId(), GenerationEvents.REQUESTED,
-				properties.requestTopic(), job.getId().toString(), objectMapper.writeValueAsString(event)));
-		return response(job);
+				topic, job.getId().toString(), objectMapper.writeValueAsString(event)));
 	}
 
 	@Transactional(readOnly = true)
@@ -83,7 +125,15 @@ public class GenerationService {
 		}
 	}
 
-	private GenerationApi.GenerationJobResponse response(GenerationJob job) {
+	private void requireEditor(AppUser actor, UUID projectId) {
+		var membership = memberships.findById(new ProjectMembershipId(projectId, actor.getId()))
+				.orElseThrow(() -> new NotFoundException("Project not found"));
+		if (membership.getRole() != ProjectRole.OWNER && membership.getRole() != ProjectRole.EDITOR) {
+			throw new ForbiddenException("Editor access is required to manage generation jobs");
+		}
+	}
+
+	GenerationApi.GenerationJobResponse response(GenerationJob job) {
 		GenerationApi.ContentVersionResponse versionResponse = null;
 		if (job.getResultContentVersion() != null) {
 			var version = job.getResultContentVersion();
@@ -92,6 +142,10 @@ public class GenerationService {
 		}
 		return new GenerationApi.GenerationJobResponse(job.getId(), job.getProject().getId(),
 				job.getRequestPrompt(), job.getStatus().name(), job.getFailureCode(), job.getFailureMessage(),
-				job.getCreatedAt(), job.getUpdatedAt(), job.getCompletedAt(), versionResponse);
+				job.getCreatedAt(), job.getUpdatedAt(), job.getCompletedAt(),
+				job.getActiveAttempt() == null ? 0 : job.getActiveAttempt().getAttemptNumber(),
+				!job.getStatus().isTerminal() && job.getStatus() != GenerationJobStatus.CANCEL_REQUESTED,
+				job.getStatus() == GenerationJobStatus.FAILED || job.getStatus() == GenerationJobStatus.TIMED_OUT,
+				versionResponse);
 	}
 }

@@ -8,7 +8,10 @@ import com.gamegeneration.platform.content.ContentVersion;
 import com.gamegeneration.platform.content.ContentVersionRepository;
 import com.gamegeneration.platform.inbox.InboxEvent;
 import com.gamegeneration.platform.inbox.InboxEventRepository;
+import com.gamegeneration.platform.outbox.OutboxEvent;
+import com.gamegeneration.platform.outbox.OutboxEventRepository;
 import com.gamegeneration.platform.project.ProjectRepository;
+import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,11 +25,15 @@ public class GenerationResultProcessor {
 	private final ProjectRepository projects;
 	private final ContentVersionRepository versions;
 	private final ContentAssetRepository assets;
+	private final OutboxEventRepository outbox;
+	private final GenerationProperties properties;
+	private final GenerationService generationService;
 
 	public GenerationResultProcessor(ObjectMapper objectMapper, InboxEventRepository inbox,
 			GenerationJobRepository jobs, GenerationAttemptRepository attempts,
 			ProjectRepository projects, ContentVersionRepository versions,
-			ContentAssetRepository assets) {
+			ContentAssetRepository assets, OutboxEventRepository outbox,
+			GenerationProperties properties, GenerationService generationService) {
 		this.objectMapper = objectMapper;
 		this.inbox = inbox;
 		this.jobs = jobs;
@@ -34,6 +41,9 @@ public class GenerationResultProcessor {
 		this.projects = projects;
 		this.versions = versions;
 		this.assets = assets;
+		this.outbox = outbox;
+		this.properties = properties;
+		this.generationService = generationService;
 	}
 
 	@Transactional
@@ -41,29 +51,50 @@ public class GenerationResultProcessor {
 		JsonNode tree = objectMapper.readTree(payload);
 		UUID eventId = UUID.fromString(tree.required("eventId").asText());
 		String eventType = tree.required("eventType").asText();
-		if (inbox.existsById(eventId)) return;
-
+		var duplicate = inbox.findForUpdate(eventId);
+		if (duplicate.isPresent()) {
+			duplicate.get().duplicateReceived();
+			return;
+		}
 		switch (eventType) {
-			case GenerationEvents.SUCCEEDED -> succeed(eventId,
-					objectMapper.treeToValue(tree, GenerationEvents.Succeeded.class));
-			case GenerationEvents.FAILED -> fail(eventId,
-					objectMapper.treeToValue(tree, GenerationEvents.Failed.class));
+			case GenerationEvents.STARTED -> started(eventId, objectMapper.treeToValue(tree, GenerationEvents.Started.class));
+			case GenerationEvents.SUCCEEDED -> succeed(eventId, objectMapper.treeToValue(tree, GenerationEvents.Succeeded.class));
+			case GenerationEvents.FAILED -> fail(eventId, objectMapper.treeToValue(tree, GenerationEvents.Failed.class));
 			default -> throw new IllegalArgumentException("Unsupported generation result event: " + eventType);
 		}
 	}
 
-	private void succeed(UUID eventId, GenerationEvents.Succeeded event) {
-		var attempt = attempts.findByExecutionKeyForUpdate(event.executionKey())
-				.orElseThrow(() -> new IllegalArgumentException("Unknown generation execution"));
-		var job = jobs.findForUpdate(event.jobId())
-				.orElseThrow(() -> new IllegalArgumentException("Unknown generation job"));
-		validateCorrelation(job, attempt, event.attemptId());
-
-		if (job.getStatus() != GenerationJobStatus.QUEUED) {
-			inbox.save(new InboxEvent(eventId, event.eventType()));
+	private void started(UUID eventId, GenerationEvents.Started event) {
+		var context = context(eventId, event.eventType(), event.jobId(), event.attemptId(), event.executionKey());
+		if (context == null) return;
+		var job = context.job();
+		var attempt = context.attempt();
+		if (recordIfInactiveOrTerminal(eventId, event.eventType(), job, attempt)) return;
+		if (job.getStatus() == GenerationJobStatus.CANCEL_REQUESTED) {
+			attempt.cancel();
+			job.cancel();
+			record(eventId, event.eventType(), job, attempt, "CANCELLED", "Worker started after cancellation request");
 			return;
 		}
+		attempt.start(event.workerExecutionId());
+		if (job.getStatus() == GenerationJobStatus.QUEUED) job.markRunning();
+		record(eventId, event.eventType(), job, attempt, "ACCEPTED", null);
+	}
 
+	private void succeed(UUID eventId, GenerationEvents.Succeeded event) {
+		var context = context(eventId, event.eventType(), event.jobId(), event.attemptId(), event.executionKey());
+		if (context == null) return;
+		var job = context.job();
+		var attempt = context.attempt();
+		if (recordIfInactiveOrTerminal(eventId, event.eventType(), job, attempt)) return;
+		if (job.getStatus() == GenerationJobStatus.CANCEL_REQUESTED) {
+			attempt.cancel();
+			job.cancel();
+			record(eventId, event.eventType(), job, attempt, "CANCELLED_LATE_RESULT",
+					"Success ignored because cancellation was requested");
+			return;
+		}
+		if (job.getStatus() == GenerationJobStatus.QUEUED) job.markRunning();
 		var version = versions.findBySourceGenerationJobId(job.getId()).orElseGet(() -> {
 			var project = projects.findForUpdate(job.getProject().getId())
 					.orElseThrow(() -> new IllegalArgumentException("Project no longer exists"));
@@ -72,7 +103,6 @@ public class GenerationResultProcessor {
 			return versions.saveAndFlush(new ContentVersion(project, job, nextVersion, title,
 					event.content().toString(), job.getRequestedBy()));
 		});
-
 		if (assets.findAllByContentVersionIdOrderByCreatedAtAsc(version.getId()).isEmpty()) {
 			for (var asset : event.assets()) {
 				assets.save(new ContentAsset(version, asset.assetType(), asset.bucket(), asset.key(),
@@ -80,28 +110,78 @@ public class GenerationResultProcessor {
 						asset.metadata() == null ? "{}" : asset.metadata().toString()));
 			}
 		}
-		attempt.succeed(event.model());
+		attempt.succeed(event.model(), event.workerExecutionId());
 		job.succeed(version);
-		inbox.save(new InboxEvent(eventId, event.eventType()));
+		record(eventId, event.eventType(), job, attempt, "ACCEPTED", null);
 	}
 
 	private void fail(UUID eventId, GenerationEvents.Failed event) {
-		var attempt = attempts.findByExecutionKeyForUpdate(event.executionKey())
-				.orElseThrow(() -> new IllegalArgumentException("Unknown generation execution"));
-		var job = jobs.findForUpdate(event.jobId())
-				.orElseThrow(() -> new IllegalArgumentException("Unknown generation job"));
-		validateCorrelation(job, attempt, event.attemptId());
-		if (job.getStatus() == GenerationJobStatus.QUEUED) {
-			attempt.fail(event.model(), event.failureCode(), event.failureMessage());
-			job.fail(event.failureCode(), event.failureMessage());
+		var context = context(eventId, event.eventType(), event.jobId(), event.attemptId(), event.executionKey());
+		if (context == null) return;
+		var job = context.job();
+		var attempt = context.attempt();
+		if (recordIfInactiveOrTerminal(eventId, event.eventType(), job, attempt)) return;
+		attempt.fail(event.model(), event.workerExecutionId(), event.failureCode(), event.failureMessage(), event.retryable());
+		if (job.getStatus() == GenerationJobStatus.CANCEL_REQUESTED) {
+			job.cancel();
+			record(eventId, event.eventType(), job, attempt, "CANCELLED", "Failure received after cancellation request");
+			return;
 		}
-		inbox.save(new InboxEvent(eventId, event.eventType()));
+		if (event.retryable() && attempt.getAttemptNumber() < properties.maxAttempts()) {
+			var next = attempts.saveAndFlush(new GenerationAttempt(job, attempt.getAttemptNumber() + 1, event.provider()));
+			job.requeue(next);
+			generationService.enqueueAttempt(job, next, properties.retryTopic());
+			record(eventId, event.eventType(), job, attempt, "RETRY_SCHEDULED", "Scheduled attempt " + next.getAttemptNumber());
+			return;
+		}
+		if (job.getStatus() == GenerationJobStatus.QUEUED) job.markRunning();
+		job.fail(event.failureCode(), event.failureMessage());
+		if (event.retryable()) publishDeadLetter(job, attempt, event);
+		record(eventId, event.eventType(), job, attempt,
+				event.retryable() ? "RETRIES_EXHAUSTED" : "NON_RETRYABLE_FAILURE", null);
 	}
 
-	private static void validateCorrelation(GenerationJob job, GenerationAttempt attempt, UUID attemptId) {
-		if (!attempt.getId().equals(attemptId) || !attempt.getJob().getId().equals(job.getId())
-				|| !job.getActiveAttempt().getId().equals(attempt.getId())) {
-			throw new IllegalArgumentException("Generation result correlation mismatch");
+	private ProcessingContext context(UUID eventId, String eventType, UUID jobId, UUID attemptId, UUID executionKey) {
+		var job = jobs.findForUpdate(jobId).orElse(null);
+		var attempt = attempts.findByExecutionKeyForUpdate(executionKey).orElse(null);
+		if (attempt == null || job == null || !attempt.getId().equals(attemptId)
+				|| !attempt.getJob().getId().equals(jobId)) {
+			record(eventId, eventType, job, attempt, "CORRELATION_REJECTED",
+					"Unknown or mismatched job, attempt, or execution key");
+			return null;
 		}
+		return new ProcessingContext(job, attempt);
 	}
+
+	private boolean recordIfInactiveOrTerminal(UUID eventId, String eventType,
+			GenerationJob job, GenerationAttempt attempt) {
+		if (job.getStatus().isTerminal()) {
+			record(eventId, eventType, job, attempt, "LATE_TERMINAL_RESULT",
+					"Result ignored because job is " + job.getStatus());
+			return true;
+		}
+		if (job.getActiveAttempt() == null || !job.getActiveAttempt().getId().equals(attempt.getId())) {
+			record(eventId, eventType, job, attempt, "STALE_ATTEMPT_RESULT",
+					"Result ignored because a newer attempt is active");
+			return true;
+		}
+		return false;
+	}
+
+	private void publishDeadLetter(GenerationJob job, GenerationAttempt attempt, GenerationEvents.Failed failure) {
+		UUID eventId = UUID.randomUUID();
+		var event = new GenerationEvents.DeadLettered(eventId, GenerationEvents.DEAD_LETTERED, 1, Instant.now(),
+				job.getId(), attempt.getId(), attempt.getExecutionKey(), attempt.getAttemptNumber(),
+				failure.failureCode(), failure.failureMessage());
+		outbox.save(new OutboxEvent(eventId, "GenerationJob", job.getId(), GenerationEvents.DEAD_LETTERED,
+				properties.dlqTopic(), job.getId().toString(), objectMapper.writeValueAsString(event)));
+	}
+
+	private void record(UUID eventId, String eventType, GenerationJob job,
+			GenerationAttempt attempt, String disposition, String detail) {
+		inbox.save(new InboxEvent(eventId, eventType, job == null ? null : job.getId(),
+				attempt == null ? null : attempt.getId(), disposition, detail));
+	}
+
+	private record ProcessingContext(GenerationJob job, GenerationAttempt attempt) {}
 }
