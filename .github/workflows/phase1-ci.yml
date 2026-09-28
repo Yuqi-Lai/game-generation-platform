@@ -1,4 +1,4 @@
-name: Phase 1 CI
+name: Platform CI
 
 on:
   push:
@@ -57,3 +57,17 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -m unittest tests.test_legacy_smoke
+
+  generation-worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/generation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e '.[test]'
+      - run: pytest

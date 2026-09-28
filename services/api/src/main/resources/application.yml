@@ -2,7 +2,7 @@ spring:
   application:
     name: game-generation-platform-api
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/game_generation}
+    url: ${DATABASE_URL:jdbc:postgresql://${DATABASE_HOST:localhost}:${DATABASE_PORT:5432}/${DATABASE_NAME:game_generation}}
     username: ${DATABASE_USERNAME:game_generation}
     password: ${DATABASE_PASSWORD:game_generation}
   flyway:

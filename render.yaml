@@ -8,10 +8,26 @@ services:
     dockerContext: ./services/api
     healthCheckPath: /actuator/health/readiness
     envVars:
-      - key: DATABASE_URL
+      - key: DATABASE_HOST
         fromDatabase:
           name: forge-postgres
-          property: connectionString
+          property: host
+      - key: DATABASE_PORT
+        fromDatabase:
+          name: forge-postgres
+          property: port
+      - key: DATABASE_NAME
+        fromDatabase:
+          name: forge-postgres
+          property: database
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: forge-postgres
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: forge-postgres
+          property: password
       - key: AUTH0_ISSUER_URI
         sync: false
       - key: AUTH0_JWK_SET_URI
