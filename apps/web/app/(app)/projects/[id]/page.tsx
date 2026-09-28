@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApiError, apiFetch } from "@/lib/api";
+import { GenerateContentForm } from "@/components/generate-content-form";
 import type { Project, ProjectMember } from "@/lib/types";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,13 +27,17 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <h1>{project.name}</h1>
           <p>{project.description || "No description yet."}</p>
         </div>
-        <div className="phase-note"><strong>Foundation ready</strong><span>Generation arrives in Phase 2.</span></div>
+        <div className="phase-note"><strong>Generation ready</strong><span>Completed output becomes a DRAFT version.</span></div>
       </section>
       <section className="detail-grid">
         <article className="panel">
-          <p className="eyebrow">Project activity</p>
-          <h2>Content workspace</h2>
-          <p>The project boundary, ownership, and permissions are active. Content generation is intentionally not enabled in this phase.</p>
+          <p className="eyebrow">Generate content</p>
+          <h2>Start a draft</h2>
+          {project.currentUserRole === "OWNER" || project.currentUserRole === "EDITOR" ? (
+            <GenerateContentForm projectId={project.id} />
+          ) : (
+            <p>Owner or editor access is required to generate content.</p>
+          )}
         </article>
         <article className="panel">
           <p className="eyebrow">Team · {members.length}</p>

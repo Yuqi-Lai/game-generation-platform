@@ -106,6 +106,22 @@ h2 { font-family: Georgia, "Times New Roman", serif; font-size: 1.7rem; font-wei
 .member-list small { color: var(--muted); font-weight: 400; margin-top: .2rem; }
 .member-list strong { color: var(--muted); font-size: .7rem; letter-spacing: .08em; }
 
+.generation-form { display: grid; gap: .7rem; }
+.generation-form label { font-size: .85rem; font-weight: 800; }
+.generation-form textarea { background: white; border: 1px solid #c9c5b9; border-radius: 9px; color: var(--ink); padding: .85rem 1rem; resize: vertical; }
+.generation-form textarea:focus { border-color: var(--forest); outline: 2px solid #203b2a25; }
+.generation-form .button { justify-self: start; margin-top: .5rem; }
+.generation-page { max-width: 850px; }
+.generation-page h1 { font-size: clamp(3rem, 8vw, 5.5rem); }
+.generation-result { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; margin-top: 2rem; padding: clamp(1.5rem, 5vw, 3rem); }
+.generation-result > p { color: var(--muted); line-height: 1.6; }
+.generation-result--failed { border-color: #d7a59e; }
+.status--queued { background: #eee2bf; border-color: #d8c78f; color: #66520f; }
+.status--failed { background: #f1d5d1; border-color: #d7a59e; color: #8a2d20; }
+.asset-list { display: grid; gap: .7rem; list-style: none; padding: 0; }
+.asset-list li { background: var(--paper); border-radius: 9px; display: grid; gap: .25rem; padding: .8rem 1rem; }
+.asset-list code { color: var(--muted); font-size: .76rem; overflow-wrap: anywhere; }
+
 @media (max-width: 760px) {
   .landing { display: block; padding-top: 8rem; }
   .landing__mark { bottom: 0; font-size: 85vw; position: absolute; right: -8vw; }
