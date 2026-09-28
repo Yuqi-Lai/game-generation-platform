@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { ApiError, apiFetch } from "@/lib/api";
 import { GenerateContentForm } from "@/components/generate-content-form";
 import { ContentVersionReview } from "@/components/content-version-review";
-import type { ContentVersion, Project, ProjectMember } from "@/lib/types";
+import { ContentPackManager } from "@/components/content-pack-manager";
+import type { ContentPack, ContentVersion, Project, ProjectMember } from "@/lib/types";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,6 +17,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   }
   const members = await apiFetch<ProjectMember[]>(`/api/v1/projects/${encodeURIComponent(id)}/members`);
   const versions = await apiFetch<ContentVersion[]>(`/api/v1/projects/${encodeURIComponent(id)}/content-versions`);
+  const packs = await apiFetch<ContentPack[]>(`/api/v1/projects/${encodeURIComponent(id)}/content-packs`);
 
   return (
     <>
@@ -67,6 +69,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </div>
         )}
       </section>
+      <ContentPackManager
+        approvedVersions={versions.filter((version) => version.status === "APPROVED")}
+        canManage={project.currentUserRole === "OWNER" || project.currentUserRole === "EDITOR"}
+        packs={packs}
+        projectId={project.id}
+      />
     </>
   );
 }

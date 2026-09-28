@@ -151,6 +151,25 @@ h2 { font-family: Georgia, "Times New Roman", serif; font-size: 1.7rem; font-wei
 .review-form textarea { border: 1px solid #c9c5b9; border-radius: 9px; padding: .75rem; resize: vertical; }
 .review-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
 .review-form > .button { justify-self: start; }
+.status--ready { background: #d9e7ef; border-color: #abc5d3; color: #24546c; }
+.status--exporting { background: #eee2bf; border-color: #d8c78f; color: #66520f; }
+.status--exported { background: #dceade; border-color: #bad0bd; color: #285231; }
+.pack-workspace { margin-top: 3rem; }
+.pack-list { display: grid; gap: 1rem; margin-top: 1rem; }
+.pack-card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 1.5rem; }
+.pack-card h3 { font-family: Georgia, serif; font-size: 1.5rem; margin-bottom: .8rem; }
+.pack-create-form, .pack-controls { align-items: end; display: flex; flex-wrap: wrap; gap: .7rem; margin-bottom: 1rem; }
+.pack-create-form label { font-size: .85rem; font-weight: 800; width: 100%; }
+.pack-create-form input, .pack-controls select { background: white; border: 1px solid #c9c5b9; border-radius: 9px; min-height: 46px; padding: .7rem .9rem; }
+.pack-create-form input { min-width: min(100%, 320px); }
+.pack-item-list { display: grid; gap: .5rem; list-style: none; padding: 0; }
+.pack-item-list li { align-items: center; background: var(--paper); border-radius: 9px; display: flex; justify-content: space-between; padding: .8rem 1rem; }
+.pack-item-list li div { display: grid; gap: .25rem; }
+.pack-item-list span { color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; }
+.text-button { background: transparent; border: 0; color: #8a2d20; cursor: pointer; font-weight: 750; }
+.export-status { border-top: 1px solid var(--line); display: grid; gap: .4rem; margin-top: 1rem; padding-top: 1rem; }
+.export-status a { color: #24546c; font-size: .82rem; text-decoration: underline; overflow-wrap: anywhere; }
+.export-status code, .export-status span { color: var(--muted); font-size: .76rem; overflow-wrap: anywhere; }
 
 @media (max-width: 760px) {
   .landing { display: block; padding-top: 8rem; }

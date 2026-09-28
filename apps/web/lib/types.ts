@@ -106,3 +106,45 @@ export interface GenerationJob {
   canRetry: boolean;
   contentVersion: ContentVersion | null;
 }
+
+export type ContentPackStatus = "DRAFT" | "READY" | "EXPORTING" | "EXPORTED" | "FAILED";
+
+export interface ContentPackItem {
+  id: string;
+  contentVersionId: string;
+  versionNumber: number;
+  title: string;
+  contentType: string;
+  content: Record<string, unknown>;
+  assets: ContentAsset[];
+  addedAt: string;
+}
+
+export interface ExportJob {
+  id: string;
+  status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+  artifactBucket: string | null;
+  artifactKey: string;
+  artifactUri: string | null;
+  contentType: string | null;
+  sizeBytes: number | null;
+  sha256: string | null;
+  failureCode: string | null;
+  failureMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface ContentPack {
+  id: string;
+  projectId: string;
+  name: string;
+  status: ContentPackStatus;
+  items: ContentPackItem[];
+  exportJob: ExportJob | null;
+  canEdit: boolean;
+  canExport: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
