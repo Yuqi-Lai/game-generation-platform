@@ -40,14 +40,55 @@ export interface ContentAsset {
   metadata: Record<string, unknown>;
 }
 
+export type ContentVersionStatus =
+  | "DRAFT"
+  | "IN_REVIEW"
+  | "APPROVED"
+  | "CHANGES_REQUESTED"
+  | "SUPERSEDED";
+
+export interface ReviewDecision {
+  id: string;
+  reviewerId: string;
+  reviewerName: string | null;
+  reviewerEmail: string | null;
+  decision: "APPROVE" | "REQUEST_CHANGES";
+  comment: string | null;
+  createdAt: string;
+  decidedAt: string;
+}
+
+export interface ReviewAssignment {
+  reviewerId: string;
+  reviewerName: string | null;
+  reviewerEmail: string | null;
+  decision: ReviewDecision | null;
+}
+
+export interface ReviewRequest {
+  id: string;
+  contentVersionId: string;
+  requestNumber: number;
+  status: "OPEN" | "APPROVED" | "CHANGES_REQUESTED" | "SUPERSEDED";
+  requestedById: string;
+  createdAt: string;
+  decidedAt: string | null;
+  reviewers: ReviewAssignment[];
+}
+
 export interface ContentVersion {
   id: string;
+  projectId?: string;
   versionNumber: number;
-  status: "DRAFT";
+  status: ContentVersionStatus;
   title: string;
   content: Record<string, unknown>;
   assets: ContentAsset[];
   createdAt: string;
+  updatedAt?: string;
+  reviewRequest?: ReviewRequest | null;
+  canSubmitForReview?: boolean;
+  canDecide?: boolean;
 }
 
 export interface GenerationJob {

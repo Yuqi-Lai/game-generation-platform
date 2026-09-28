@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApiError, apiFetch } from "@/lib/api";
 import { GenerateContentForm } from "@/components/generate-content-form";
-import type { Project, ProjectMember } from "@/lib/types";
+import { ContentVersionReview } from "@/components/content-version-review";
+import type { ContentVersion, Project, ProjectMember } from "@/lib/types";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -14,6 +15,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     throw error;
   }
   const members = await apiFetch<ProjectMember[]>(`/api/v1/projects/${encodeURIComponent(id)}/members`);
+  const versions = await apiFetch<ContentVersion[]>(`/api/v1/projects/${encodeURIComponent(id)}/content-versions`);
 
   return (
     <>
@@ -27,7 +29,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <h1>{project.name}</h1>
           <p>{project.description || "No description yet."}</p>
         </div>
-        <div className="phase-note"><strong>Generation ready</strong><span>Completed output becomes a DRAFT version.</span></div>
+        <div className="phase-note"><strong>Review ready</strong><span>Generated drafts can move through project review.</span></div>
       </section>
       <section className="detail-grid">
         <article className="panel">
@@ -51,6 +53,19 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             ))}
           </ul>
         </article>
+      </section>
+      <section className="version-history">
+        <div className="version-history__heading">
+          <div><p className="eyebrow">Content workflow</p><h2>Version history</h2></div>
+          <span>{versions.length} version{versions.length === 1 ? "" : "s"}</span>
+        </div>
+        {versions.length === 0 ? (
+          <div className="empty-state"><h2>No content versions yet</h2><p>Generate a draft to begin the review workflow.</p></div>
+        ) : (
+          <div className="version-list">
+            {versions.map((version) => <ContentVersionReview key={version.id} projectId={project.id} version={version} />)}
+          </div>
+        )}
       </section>
     </>
   );
