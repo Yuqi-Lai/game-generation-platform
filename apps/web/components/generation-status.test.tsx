@@ -14,6 +14,9 @@ describe("GenerationStatus", () => {
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:01:00Z",
       completedAt: "2026-01-01T00:01:00Z",
+      attemptNumber: 1,
+      canCancel: false,
+      canRetry: false,
       contentVersion: {
         id: "version-1",
         versionNumber: 1,
@@ -36,5 +39,47 @@ describe("GenerationStatus", () => {
     expect(screen.getByText("DRAFT")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Synthetic Quest" })).toBeInTheDocument();
     expect(screen.getByText("s3://test-bucket/synthetic/content.json")).toBeInTheDocument();
+  });
+
+  it("offers cancellation while a job is running", () => {
+    render(<GenerationStatus initialJob={{
+      id: "job-2",
+      projectId: "project-1",
+      prompt: "Create a synthetic quest.",
+      status: "RUNNING",
+      failureCode: null,
+      failureMessage: null,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:01:00Z",
+      completedAt: null,
+      attemptNumber: 1,
+      canCancel: true,
+      canRetry: false,
+      contentVersion: null,
+    }} />);
+
+    expect(screen.getByText("RUNNING")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel generation" })).toBeInTheDocument();
+  });
+
+  it("shows a readable failure and a retry action", () => {
+    render(<GenerationStatus initialJob={{
+      id: "job-3",
+      projectId: "project-1",
+      prompt: "Create a synthetic quest.",
+      status: "FAILED",
+      failureCode: "PROVIDER_INVALID_REQUEST",
+      failureMessage: "The provider rejected the request.",
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:01:00Z",
+      completedAt: "2026-01-01T00:01:00Z",
+      attemptNumber: 1,
+      canCancel: false,
+      canRetry: true,
+      contentVersion: null,
+    }} />);
+
+    expect(screen.getByText("The provider rejected the request.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry generation" })).toBeInTheDocument();
   });
 });

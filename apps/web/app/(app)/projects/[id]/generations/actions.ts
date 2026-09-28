@@ -11,9 +11,10 @@ export async function generateContentAction(
   formData: FormData,
 ): Promise<GenerateContentState> {
   const projectId = String(formData.get("projectId") ?? "");
+  const requestId = String(formData.get("requestId") ?? "");
   const prompt = String(formData.get("prompt") ?? "").trim();
 
-  if (!projectId) return { error: "Project is required." };
+  if (!projectId || !requestId) return { error: "Generation request is incomplete." };
   if (!prompt) return { error: "Describe the content you want to generate." };
   if (prompt.length > 20_000) return { error: "Prompt must be 20,000 characters or fewer." };
 
@@ -21,7 +22,7 @@ export async function generateContentAction(
   try {
     job = await apiFetch<GenerationJob>(
       `/api/v1/projects/${encodeURIComponent(projectId)}/generations`,
-      { method: "POST", body: JSON.stringify({ prompt }) },
+      { method: "POST", body: JSON.stringify({ requestId, prompt }) },
     );
   } catch (error) {
     return { error: error instanceof ApiError ? error.message : "Could not start generation." };

@@ -21,7 +21,14 @@ export interface ProjectMember {
   joinedAt: string;
 }
 
-export type GenerationJobStatus = "QUEUED" | "SUCCEEDED" | "FAILED";
+export type GenerationJobStatus =
+  | "QUEUED"
+  | "RUNNING"
+  | "SUCCEEDED"
+  | "FAILED"
+  | "CANCEL_REQUESTED"
+  | "CANCELLED"
+  | "TIMED_OUT";
 
 export interface ContentAsset {
   assetType: string;
@@ -53,5 +60,8 @@ export interface GenerationJob {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  attemptNumber: number;
+  canCancel: boolean;
+  canRetry: boolean;
   contentVersion: ContentVersion | null;
 }

@@ -1,14 +1,16 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { generateContentAction } from "@/app/(app)/projects/[id]/generations/actions";
 
 export function GenerateContentForm({ projectId }: { projectId: string }) {
   const [state, action, pending] = useActionState(generateContentAction, {});
+  const [requestId] = useState(() => crypto.randomUUID());
 
   return (
     <form className="generation-form" action={action}>
       <input type="hidden" name="projectId" value={projectId} />
+      <input type="hidden" name="requestId" value={requestId} />
       <label htmlFor="prompt">Generation brief</label>
       <textarea
         id="prompt"
