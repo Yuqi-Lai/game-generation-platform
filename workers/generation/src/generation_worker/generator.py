@@ -69,18 +69,18 @@ GAME_PLAN_WIRE_SCHEMA = {
     ],
 }
 
-BACKGROUND_PIXEL_ART_PROMPT = (
-    "masterpiece 16-bit cozy retro pixel art, Stardew Valley & Eastward aesthetic, "
-    "strictly 2D orthographic top-down view, zero 3D perspective distortion, parallel "
-    "horizontal walkable ground plane, clean tilemap layout, cohesive 32-color retro "
-    "palette, crisp pixel shading, no modern digital watercolor blur, no smooth gradients"
+BACKGROUND_NEO_PIXEL_PROMPT = (
+    "masterpiece modern high-detail pixel art, modern neo-retro indie aesthetic, in the art "
+    "style of Eastward and Chained Echoes, sophisticated cinematic color palette with hue "
+    "shifting, moody atmospheric lighting, lush environmental details, clean orthographic "
+    "2D plane, crisp pixel clusters, no mud, zero blurry watercolor gradients"
 )
 
-SPRITE_PIXEL_ART_PROMPT = (
-    "chibi 16-bit pixel art character sprite sheet, Stardew Valley aesthetic, crisp "
-    "1-pixel dark outline, clean flat pixel shading, directional sunlight from top-left, "
-    "solid chroma-green (#00FF00) background, strictly flat 2D projection, no "
-    "anti-aliased semi-transparent halo"
+SPRITE_NEO_PIXEL_PROMPT = (
+    "modern detailed 2D pixel art character sprite, Eastward aesthetic, stylish readable "
+    "proportions, crisp 1-pixel dark outline, beautiful subtle highlights, directional "
+    "cinematic lighting from top-left, solid chroma-green (#00FF00) background, sharp "
+    "edges, modern indie game quality"
 )
 
 
@@ -117,7 +117,7 @@ class GeminiGenerator:
         stand = self._asset(
             generated, output_prefix, "player.stand", "PLAYER_STAND", "player/stand.png",
             normalize_single_sprite(self._generate_image(
-                f"{style}\n{SPRITE_PIXEL_ART_PROMPT}. Single full-body front-facing character. "
+                f"{style}\n{SPRITE_NEO_PIXEL_PROMPT}. Single full-body front-facing character. "
                 f"Character: {player.name}. Canonical appearance: {player.description}. No text or props."
             )), 128, 128, True,
         )
@@ -127,7 +127,7 @@ class GeminiGenerator:
                 generated, output_prefix, f"player.{direction}", "PLAYER_DIRECTION",
                 f"player/{direction}.png",
                 normalize_sprite_strip(self._generate_image(
-                    f"{style}\n{SPRITE_PIXEL_ART_PROMPT}. Create exactly three equally spaced horizontal "
+                    f"{style}\n{SPRITE_NEO_PIXEL_PROMPT}. Create exactly three equally spaced horizontal "
                     f"animation frames, all facing {direction}: contact, passing, contact. No text. "
                     "Preserve the reference character exactly.",
                     [stand.body], aspect_ratio="16:9",
@@ -136,7 +136,7 @@ class GeminiGenerator:
         player_avatar = self._asset(
             generated, output_prefix, "player.avatar", "PLAYER_AVATAR", "player/avatar.png",
             normalize_avatar(self._generate_image(
-                f"{style}\n{SPRITE_PIXEL_ART_PROMPT}. Head-and-shoulders dialogue portrait of {player.name}. "
+                f"{style}\n{SPRITE_NEO_PIXEL_PROMPT}. Head-and-shoulders dialogue portrait of {player.name}. "
                 "Preserve the reference identity and outfit. Neutral expression, no text.", [stand.body]
             )), 256, 256, True,
         )
@@ -146,7 +146,7 @@ class GeminiGenerator:
             sprite = self._asset(
                 generated, output_prefix, f"npc.{npc.id}.sprite", "NPC_SPRITE", f"npcs/{npc.id}/sprite.png",
                 normalize_single_sprite(self._generate_image(
-                    f"{style}\n{SPRITE_PIXEL_ART_PROMPT}. Single full-body side-facing RPG character. NPC: {npc.name}. "
+                    f"{style}\n{SPRITE_NEO_PIXEL_PROMPT}. Single full-body side-facing RPG character. NPC: {npc.name}. "
                     f"Canonical appearance: {npc.description}. Match the reference hero's visual language. No text.",
                     [stand.body],
                 )), 128, 128, True,
@@ -154,7 +154,7 @@ class GeminiGenerator:
             avatar = self._asset(
                 generated, output_prefix, f"npc.{npc.id}.avatar", "NPC_AVATAR", f"npcs/{npc.id}/avatar.png",
                 normalize_avatar(self._generate_image(
-                    f"{style}\n{SPRITE_PIXEL_ART_PROMPT}. Head-and-shoulders dialogue portrait of {npc.name}; "
+                    f"{style}\n{SPRITE_NEO_PIXEL_PROMPT}. Head-and-shoulders dialogue portrait of {npc.name}; "
                     "preserve the referenced identity. No text.", [sprite.body]
                 )), 256, 256, True,
             )
@@ -169,7 +169,7 @@ class GeminiGenerator:
                 generated, output_prefix, f"minion.{minion.id}.sprite", "MINION_SPRITE",
                 f"minions/{minion.id}/sprite.png",
                 normalize_single_sprite(self._generate_image(
-                    f"{style}\n{SPRITE_PIXEL_ART_PROMPT}. Single full-body side-facing RPG creature. "
+                    f"{style}\n{SPRITE_NEO_PIXEL_PROMPT}. Single full-body side-facing RPG creature. "
                     f"Creature: {minion.name}. "
                     f"Canonical appearance: {minion.description}. Match the reference art direction. No text.",
                     [stand.body],
@@ -186,7 +186,7 @@ class GeminiGenerator:
                 generated, output_prefix, f"scene.{scene.id}.background", "SCENE_BACKGROUND",
                 f"scenes/{scene.id}/background.png",
                 normalize_background(self._generate_image(
-                    f"{style}\n{BACKGROUND_PIXEL_ART_PROMPT}. No characters, no text. Location: {scene.location}. "
+                    f"{style}\n{BACKGROUND_NEO_PIXEL_PROMPT}. No characters, no text. Location: {scene.location}. "
                     "Show a clearly walkable central route with decorative structures away from the route. Exact 16:9 composition.",
                     aspect_ratio="16:9",
                 )), 2560, 1440, False,
@@ -267,9 +267,9 @@ class GeminiGenerator:
     def _style_prompt(plan: GamePlan) -> str:
         return (
             f"Shared game art direction: {plan.style.art_direction}. Palette: {', '.join(plan.style.palette)}. "
-            f"World: {plan.style.world_description}. Crisp 16-bit top-down RPG pixel art, consistent lighting, "
-            "consistent scale, strictly orthographic 2D projection, cohesive 32-color palette, original "
-            "characters, no typography, no gradients, no painterly blur."
+            f"World: {plan.style.world_description}. Crisp modern high-detail top-down neo-pixel art, consistent lighting, "
+            "consistent scale, strictly orthographic 2D projection, sophisticated hue-shifted cinematic "
+            "palette, original characters, no typography, no muddy colors, no blurry gradients."
         )
 
     @staticmethod

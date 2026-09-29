@@ -7,8 +7,8 @@ from PIL import Image, ImageDraw
 from pydantic import ValidationError
 
 from generation_worker.generator import (
-    BACKGROUND_PIXEL_ART_PROMPT,
-    SPRITE_PIXEL_ART_PROMPT,
+    BACKGROUND_NEO_PIXEL_PROMPT,
+    SPRITE_NEO_PIXEL_PROMPT,
     GeminiGenerator,
 )
 from generation_worker.image_processing import (
@@ -112,13 +112,13 @@ def test_sprite_normalization_removes_chroma_and_forces_binary_alpha():
         )
 
 
-def test_background_normalization_uses_32_color_four_pixel_grid():
+def test_background_normalization_uses_64_color_two_pixel_grid():
     background = normalize_background(synthetic_source_png())
     validate_png(background, (2560, 1440), require_transparency=False)
     with Image.open(BytesIO(background)).convert("RGB") as image:
-        assert len(image.getcolors(maxcolors=33)) <= 32
+        assert len(image.getcolors(maxcolors=65)) <= 64
         for x, y in ((0, 0), (400, 400), (1200, 800), (2400, 1200)):
-            assert len({image.getpixel((x + dx, y + dy)) for dx in range(4) for dy in range(4)}) == 1
+            assert len({image.getpixel((x + dx, y + dy)) for dx in range(2) for dy in range(2)}) == 1
 
 
 def test_unsafe_map_uses_anchored_traversable_fallback():
@@ -196,8 +196,8 @@ def test_asset_prompts_lock_pixel_art_projection_palette_and_chroma_key():
 
     CapturingGenerator().generate("A clockwork rescue", "projects/p/jobs/j/attempts/a")
 
-    assert any(SPRITE_PIXEL_ART_PROMPT in prompt for prompt, _ in prompts)
-    assert any(BACKGROUND_PIXEL_ART_PROMPT in prompt for prompt, _ in prompts)
-    assert all("no gradients" in prompt for prompt, _ in prompts)
+    assert any(SPRITE_NEO_PIXEL_PROMPT in prompt for prompt, _ in prompts)
+    assert any(BACKGROUND_NEO_PIXEL_PROMPT in prompt for prompt, _ in prompts)
+    assert all("no muddy colors" in prompt for prompt, _ in prompts)
     assert prompts[0][1] == "1:1"
-    assert any(BACKGROUND_PIXEL_ART_PROMPT in prompt and ratio == "16:9" for prompt, ratio in prompts)
+    assert any(BACKGROUND_NEO_PIXEL_PROMPT in prompt and ratio == "16:9" for prompt, ratio in prompts)

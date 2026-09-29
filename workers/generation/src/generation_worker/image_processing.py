@@ -75,7 +75,7 @@ def remove_edge_background(image: Image.Image, threshold: int = 235) -> Image.Im
     return image
 
 
-def quantize_pixel_art(image: Image.Image, colors: int = 32) -> Image.Image:
+def quantize_pixel_art(image: Image.Image, colors: int = 48) -> Image.Image:
     alpha = image.getchannel("A")
     rgb = image.convert("RGB").quantize(colors=colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     result = rgb.convert("RGBA")
@@ -128,9 +128,9 @@ def normalize_avatar(value: bytes) -> bytes:
 
 def normalize_background(value: bytes) -> bytes:
     image = decode_image(value).convert("RGB")
-    # Render on a low-resolution pixel grid before nearest-neighbor enlargement.
-    image = image.resize((640, 360), Image.Resampling.NEAREST)
-    image = image.quantize(colors=32, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).convert("RGB")
+    # Preserve modern pixel-art detail on a 2x grid while preventing soft scaling.
+    image = image.resize((1280, 720), Image.Resampling.NEAREST)
+    image = image.quantize(colors=64, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).convert("RGB")
     return encode_png(image.resize((2560, 1440), Image.Resampling.NEAREST))
 
 
