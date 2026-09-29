@@ -124,6 +124,7 @@ export function GenerationStatus({ initialJob }: { initialJob: GenerationJob }) 
   const version = job.contentVersion;
   const synopsis = typeof version.content.synopsis === "string" ? version.content.synopsis : null;
   const scenes = Array.isArray(version.content.scenes) ? version.content.scenes : [];
+  const isPlayableV1 = version.content.version === "playable-game-content/v1";
 
   return (
     <section className="generation-result" aria-live="polite">
@@ -134,6 +135,16 @@ export function GenerationStatus({ initialJob }: { initialJob: GenerationJob }) 
       <h2>{version.title}</h2>
       {synopsis ? <p>{synopsis}</p> : null}
       {scenes.length > 0 ? <p><strong>{scenes.length}</strong> generated scene{scenes.length === 1 ? "" : "s"}</p> : null}
+      {isPlayableV1 ? (
+        <a
+          className="button"
+          href={`/playable?manifest=${encodeURIComponent(`/api/projects/${job.projectId}/generations/${job.id}/manifest`)}`}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Play game
+        </a>
+      ) : null}
       <h3>Stored assets</h3>
       <ul className="asset-list">
         {version.assets.map((asset) => (

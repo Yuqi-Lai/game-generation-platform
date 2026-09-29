@@ -22,7 +22,11 @@ describe("GenerationStatus", () => {
         versionNumber: 1,
         status: "DRAFT",
         title: "Synthetic Quest",
-        content: { synopsis: "An original safe fixture.", scenes: [{ title: "Workshop" }] },
+        content: {
+          version: "playable-game-content/v1",
+          synopsis: "An original safe fixture.",
+          scenes: [{ title: "Workshop" }],
+        },
         createdAt: "2026-01-01T00:01:00Z",
         assets: [{
           assetType: "CONTENT_JSON",
@@ -39,6 +43,10 @@ describe("GenerationStatus", () => {
     expect(screen.getByText("DRAFT")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Synthetic Quest" })).toBeInTheDocument();
     expect(screen.getByText("s3://test-bucket/synthetic/content.json")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Play game" })).toHaveAttribute(
+      "href",
+      "/playable?manifest=%2Fapi%2Fprojects%2Fproject-1%2Fgenerations%2Fjob-1%2Fmanifest",
+    );
   });
 
   it("offers cancellation while a job is running", () => {
