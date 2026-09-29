@@ -1,4 +1,5 @@
 from io import BytesIO
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -102,11 +103,21 @@ def test_contract_rejects_non_anchored_world_size_and_missing_asset_reference():
 
 def test_plan_generation_uses_generate_content_structured_output_config():
     captured = {}
+    plan = synthetic_plan().model_dump(mode="json", by_alias=True)
+    wire = {
+        "title": plan["title"],
+        "openingRemarks": plan["openingRemarks"],
+        "styleJson": json.dumps(plan["style"]),
+        "playerJson": json.dumps(plan["player"]),
+        "npcsJson": json.dumps(plan["npcs"]),
+        "minionsJson": json.dumps(plan["minions"]),
+        "scenesJson": json.dumps(plan["scenes"]),
+    }
 
     class Models:
         def generate_content(self, **kwargs):
             captured.update(kwargs)
-            return SimpleNamespace(text=synthetic_plan().model_dump_json(by_alias=True))
+            return SimpleNamespace(text=json.dumps(wire))
 
     generator = GeminiGenerator.__new__(GeminiGenerator)
     generator._settings = SimpleNamespace(gemini_text_model="gemini-3.8-flash")
@@ -115,8 +126,10 @@ def test_plan_generation_uses_generate_content_structured_output_config():
     assert generator._generate_plan("An original test story").title == "Beacon Workshop"
     assert captured["model"] == "gemini-3.8-flash"
     assert captured["config"].response_mime_type == "application/json"
-    assert captured["config"].response_schema == {"type": "object"}
+    assert set(captured["config"].response_schema["required"]) == set(wire)
     assert "collisionRectangles" in captured["contents"]
+    assert "lowercase kebab-case" in captured["contents"]
+    assert "palette must be a JSON array" in captured["contents"]
 
 
 def test_synthetic_provider_builds_complete_playable_manifest_before_success():

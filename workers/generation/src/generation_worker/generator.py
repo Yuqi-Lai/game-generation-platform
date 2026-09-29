@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 from dataclasses import dataclass
 
 from google import genai
@@ -38,16 +39,35 @@ player spawn to the exit and use only simple axis-aligned collision rectangles.
 """.strip()
 
 PLAN_OUTPUT_LAYOUT = """
-Return exactly one JSON object with these camelCase fields:
-- title, openingRemarks
-- style: {artDirection, palette, worldDescription}
-- player: {id, name, description, stats: {hp, attack, defense}}
-- npcs and minions: arrays of the same character fields
-- scenes: [{id, title, location, objective, npcIds, minionIds,
+Return a flat JSON wrapper. title and openingRemarks are plain strings. The remaining
+fields are strings containing serialized JSON with these exact shapes:
+- styleJson: {artDirection, palette, worldDescription}
+- playerJson: {id, name, description, stats: {hp, attack, defense}}
+- npcsJson and minionsJson: arrays of the same character shape
+- scenesJson: [{id, title, location, objective, npcIds, minionIds,
   dialogue: [{speaker, text}], playerSpawn: {x, y}, exit: {x, y},
   collisionRectangles: [{x, y, width, height}]}]
-Do not add other fields.
+Each *Json value must be valid serialized JSON text. Do not add other wrapper fields.
+palette must be a JSON array containing 3 to 8 short color strings.
+Every id and every npcIds/minionIds reference must use lowercase kebab-case with no underscores.
 """.strip()
+
+GAME_PLAN_WIRE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "openingRemarks": {"type": "string"},
+        "styleJson": {"type": "string"},
+        "playerJson": {"type": "string"},
+        "npcsJson": {"type": "string"},
+        "minionsJson": {"type": "string"},
+        "scenesJson": {"type": "string"},
+    },
+    "required": [
+        "title", "openingRemarks", "styleJson", "playerJson",
+        "npcsJson", "minionsJson", "scenesJson",
+    ],
+}
 
 
 @dataclass(frozen=True)
@@ -189,12 +209,21 @@ class GeminiGenerator:
             contents=f"{PLAN_SYSTEM_PROMPT}\n\n{PLAN_OUTPUT_LAYOUT}\n\nUser premise:\n{prompt}",
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema={"type": "object"},
+                response_schema=GAME_PLAN_WIRE_SCHEMA,
             ),
         )
         if not response.text:
             raise ValueError("Gemini returned no structured game plan")
-        return GamePlan.model_validate_json(response.text)
+        wire = json.loads(response.text)
+        return GamePlan.model_validate({
+            "title": wire["title"],
+            "openingRemarks": wire["openingRemarks"],
+            "style": json.loads(wire["styleJson"]),
+            "player": json.loads(wire["playerJson"]),
+            "npcs": json.loads(wire["npcsJson"]),
+            "minions": json.loads(wire["minionsJson"]),
+            "scenes": json.loads(wire["scenesJson"]),
+        })
 
     def _generate_image(self, prompt: str, references: list[bytes] | None = None) -> bytes:
         inputs: list[dict[str, str]] = [{"type": "text", "text": prompt}]
@@ -207,7 +236,7 @@ class GeminiGenerator:
             model=self._settings.gemini_image_model,
             input=inputs,
             response_format={
-                "type": "image", "mime_type": "image/png", "aspect_ratio": "16:9", "image_size": "1K",
+                "type": "image", "mime_type": "image/jpeg", "aspect_ratio": "16:9", "image_size": "1K",
             },
         )
         if not interaction.output_image:
