@@ -1,14 +1,13 @@
 // VERSION CHECK
 console.log("%c GAME.JS LOADED - VERSION 9 - DEBUG MODE ", "background: #222; color: #bada55; font-size: 20px");
 
+const PLAYABLE_MANIFEST_REQUESTED = new URLSearchParams(window.location.search).has('manifest');
 const config = {
     type: Phaser.AUTO,
     parent: 'game-container',
-    scale: {
-        mode: Phaser.Scale.RESIZE,
-        width: '100%',
-        height: '100%'
-    },
+    scale: PLAYABLE_MANIFEST_REQUESTED
+        ? { mode: Phaser.Scale.FIT, width: 2048, height: 1152, autoCenter: Phaser.Scale.CENTER_BOTH }
+        : { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
     pixelArt: true,
     physics: {
         default: 'arcade',
@@ -337,6 +336,7 @@ function setupGame(logStep) {
         key = 'bg_placeholder';
     }
     bgSprite = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-100);
+    if (playableManifest) this.game.canvas.dataset.playableViewport = '2048x1152';
 
     // Build player spritesheets from strips
     const buildPlayerSheet = (imgKey, sheetKey) => {

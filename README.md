@@ -1,5 +1,9 @@
 # Game Generation Platform
 
+## Playable example
+
+[Tideglass Farm](examples/tideglass-farm/README.md) is an original seaside-farm canary premise for the JRPG pixel-art generator. It shows a compact cottage, crop beds, and a nearby shore without using the preserved legacy sample stories. The V1 runtime supports exploration and dialogue; farming interactions are not implemented yet.
+
 This repository contains the Phase 1 foundation for a game content generation and production platform. The current live workflow is an invite-only project workspace; generation and versioning begin in Phase 2.
 
 ## Repository layout

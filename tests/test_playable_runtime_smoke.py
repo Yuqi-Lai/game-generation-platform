@@ -35,6 +35,8 @@ class PlayableRuntimeSmokeTest(unittest.TestCase):
             "the platform runtime copy must stay byte-for-byte aligned with the preserved Phaser runtime",
         )
         self.assertIn("pixelArt: true", runtime_source)
+        self.assertIn("PLAYABLE_MANIFEST_REQUESTED", runtime_source)
+        self.assertIn("width: 2048, height: 1152", runtime_source)
         self.assertIn("const ACTOR_DISPLAY_HEIGHT = 128", runtime_source)
         self.assertIn("function setActorFootprint(actor)", runtime_source)
         self.assertIn("function addGroundShadow(scene, actor)", runtime_source)
@@ -132,6 +134,7 @@ class PlayableRuntimeSmokeTest(unittest.TestCase):
                 self.assertIn("<canvas", result.stdout)
                 self.assertIn('data-collision-bodies="1"', result.stdout)
                 self.assertIn('data-player-collision-bound="true"', result.stdout)
+                self.assertIn('data-playable-viewport="2048x1152"', result.stdout)
                 server.shutdown()
                 thread.join(timeout=5)
 
