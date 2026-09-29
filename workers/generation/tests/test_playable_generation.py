@@ -10,6 +10,7 @@ from generation_worker.generator import (
     DEFAULT_ART_DIRECTION,
     DEFAULT_SCENE_BASE,
     DEFAULT_SPRITE_BASE,
+    GLOBAL_VISUAL_ANCHOR,
     SCENE_RENDER_GUARD,
     GeminiGenerator,
 )
@@ -147,6 +148,15 @@ def test_background_normalization_has_a_four_pixel_grid_without_blur():
             assert len({image.getpixel((x + dx, y + dy)) for dx in range(4) for dy in range(4)}) == 1
 
 
+def test_background_color_is_moderated_without_becoming_gray():
+    source = Image.new("RGB", (256, 144), (0, 255, 255))
+    buffer = BytesIO()
+    source.save(buffer, format="PNG")
+    with Image.open(BytesIO(normalize_background(buffer.getvalue()))).convert("RGB") as image:
+        red, green, blue = image.getpixel((100, 100))
+        assert 120 < max(red, green, blue) - min(red, green, blue) < 240
+
+
 def test_unsafe_map_uses_anchored_traversable_fallback():
     normalized = normalize_plan(synthetic_plan(blocked_spawn=True))
     scene = normalized.scenes[0]
@@ -204,6 +214,50 @@ def test_plan_generation_uses_generate_content_structured_output_config():
     assert "collisionRectangles" in captured["contents"]
     assert "lowercase kebab-case" in captured["contents"]
     assert "palette must be a JSON array" in captured["contents"]
+    assert "If the premise is vague or short, expand it" in captured["contents"]
+
+
+def test_malformed_nested_plan_json_is_retried_once():
+    plan = synthetic_plan().model_dump(mode="json", by_alias=True)
+    wire = {
+        "title": plan["title"], "openingRemarks": plan["openingRemarks"],
+        "styleJson": json.dumps(plan["style"]), "playerJson": json.dumps(plan["player"]),
+        "npcsJson": json.dumps(plan["npcs"]), "minionsJson": json.dumps(plan["minions"]),
+        "scenesJson": json.dumps(plan["scenes"]),
+    }
+    calls = 0
+
+    class Models:
+        def generate_content(self, **kwargs):
+            nonlocal calls
+            calls += 1
+            return SimpleNamespace(text=json.dumps({**wire, "scenesJson": "{"}) if calls == 1 else json.dumps(wire))
+
+    generator = GeminiGenerator.__new__(GeminiGenerator)
+    generator._settings = SimpleNamespace(gemini_text_model="synthetic-text")
+    generator._client = SimpleNamespace(models=Models())
+    assert generator._generate_plan("A vague farm premise").title == "Beacon Workshop"
+    assert calls == 2
+
+
+def test_excess_model_collision_rectangles_use_bounded_fallback():
+    plan = synthetic_plan().model_dump(mode="json", by_alias=True)
+    plan["scenes"][0]["collisionRectangles"] *= 13
+    wire = {
+        "title": plan["title"], "openingRemarks": plan["openingRemarks"],
+        "styleJson": json.dumps(plan["style"]), "playerJson": json.dumps(plan["player"]),
+        "npcsJson": json.dumps(plan["npcs"]), "minionsJson": json.dumps(plan["minions"]),
+        "scenesJson": json.dumps(plan["scenes"]),
+    }
+
+    class Models:
+        def generate_content(self, **kwargs):
+            return SimpleNamespace(text=json.dumps(wire))
+
+    generator = GeminiGenerator.__new__(GeminiGenerator)
+    generator._settings = SimpleNamespace(gemini_text_model="synthetic-text")
+    generator._client = SimpleNamespace(models=Models())
+    assert len(generator._generate_plan("A farm").scenes[0].collision_rectangles) == 4
 
 
 def test_synthetic_provider_builds_complete_playable_manifest_before_success():
@@ -248,6 +302,7 @@ def test_every_asset_prompt_uses_the_permanent_jrpg_base():
     assert len(prompts) == 9
     assert all(prompt.endswith(DEFAULT_SPRITE_BASE) for prompt, _ in prompts[:-1])
     assert prompts[-1][0].endswith(DEFAULT_SCENE_BASE + SCENE_RENDER_GUARD)
+    assert all(GLOBAL_VISUAL_ANCHOR in prompt for prompt, _ in prompts)
     assert not any("watercolor" in prompt.lower() for prompt, _ in prompts)
     assert all("no second row, no stacked or partial duplicates" in prompt for prompt, _ in prompts[1:4])
     assert not any("witch" in prompt.lower() or "windmill" in prompt.lower() for prompt, _ in prompts)

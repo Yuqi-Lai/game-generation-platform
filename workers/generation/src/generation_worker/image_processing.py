@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import deque
 from io import BytesIO
 
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 from .playable import SPRITE_FRAME_COUNT, SPRITE_FRAME_HEIGHT, SPRITE_FRAME_WIDTH
 
@@ -261,6 +261,7 @@ def normalize_avatar(value: bytes) -> bytes:
 
 def normalize_background(value: bytes) -> bytes:
     image = decode_image(value).convert("RGB")
+    image = ImageEnhance.Color(image).enhance(0.78)
     image = image.resize((640, 360), Image.Resampling.NEAREST)
     image = image.quantize(
         colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE

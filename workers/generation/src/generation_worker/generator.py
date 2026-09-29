@@ -18,6 +18,7 @@ from .image_processing import (
 from .playable import (
     AssetDescriptor,
     CharacterAssets,
+    FALLBACK_COLLISIONS,
     GamePlan,
     PlayableCharacter,
     PlayableGameContentV1,
@@ -34,11 +35,17 @@ Create a compact, playable top-down 2D JRPG plan from the user's premise.
 This request is only for the plan; do not describe image files or generate assets.
 Preserve explicit character appearances, setting details, story events, and the order
 and meaning of any dialogue in the premise. Add brief connective dialogue only when
-the premise contains none. Use one coherent palette. Keep the cast and map small
-enough for a short demo. Dialogue speakers must exactly match the player or an NPC
+the premise contains none. If the premise is vague or short, expand it into an
+original, specific mini-adventure: a clear playable objective, two or three memorable
+landmarks, a consistent character appearance, and a few purposeful dialogue lines.
+Do not replace the user's concrete details or invent a different genre or setting.
+Choose a restrained palette of nuanced midtones with one bright accent; avoid neon
+or uniformly saturated colors. Keep the cast and map small enough for a short demo.
+Buildings should be human-scale, not monumental, unless the premise requires them.
+Dialogue speakers must exactly match the player or an NPC
 name. The world is exactly 2560x1440. Place the player spawn and exit on solid walkable
 ground along a clear central route, never in water, void, cliffs, or a building.
-Use only simple axis-aligned collision rectangles.
+Use no more than six simple axis-aligned collision rectangles.
 artDirection must describe classic 2D JRPG pixel art. worldDescription and location
 must describe places and objects, without competing visual-medium instructions.
 """.strip()
@@ -75,6 +82,14 @@ GAME_PLAN_WIRE_SCHEMA = {
 }
 
 DEFAULT_ART_DIRECTION = "Classic 2D JRPG pixel art with a consistent palette and crisp square pixels"
+GLOBAL_VISUAL_ANCHOR = (
+    "One shared visual bible for the entire game: a 64-world-pixel tile rhythm, "
+    "readable 1.5-to-2-tile-tall actors, compact one-story buildings about 3-to-4 tiles tall, "
+    "human-scale props, a single consistent soft light direction from the upper left, "
+    "moderate saturation with nuanced midtones and only one vivid accent, clear silhouettes, "
+    "and the same material textures and proportions across every asset. "
+    "Use a compact playable composition with breathing room rather than oversized scenery."
+)
 DEFAULT_SPRITE_BASE = (
     ", classic 2D JRPG pixel art sprite sheet, 1.5 to 2-head-tall chibi proportions, "
     "distinct 1-pixel dark outline, retro pixel cluster shading, strictly 2D flat orthographic "
@@ -201,7 +216,9 @@ class GeminiGenerator:
                 generated, output_prefix, f"scene.{scene.id}.background", "SCENE_BACKGROUND",
                 f"scenes/{scene.id}/background.png",
                 normalize_background(self._generate_image(self._scene_prompt(
-                    style, f"Location: {scene.location}. Show continuous solid walkable ground "
+                    style, f"Location: {scene.location}. Frame this as a compact small-town game map, "
+                    "not a sweeping panorama. Keep any house, cliff, or large prop modest relative "
+                    "to the player. Show continuous solid walkable ground "
                     "through the middle horizontal band from left-of-center to right-of-center; "
                     "place water, cliffs, and buildings outside that route. Keep blocking scenery "
                     "in separate compact clusters away from it. Collision geometry "
@@ -240,26 +257,41 @@ class GeminiGenerator:
         )
 
     def _generate_plan(self, prompt: str) -> GamePlan:
-        response = self._client.models.generate_content(
-            model=self._settings.gemini_text_model,
-            contents=f"{PLAN_SYSTEM_PROMPT}\n\n{PLAN_OUTPUT_LAYOUT}\n\nUser premise:\n{prompt}",
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=GAME_PLAN_WIRE_SCHEMA,
-            ),
-        )
-        if not response.text:
-            raise ValueError("Gemini returned no structured game plan")
-        wire = json.loads(response.text)
-        return GamePlan.model_validate({
-            "title": wire["title"],
-            "openingRemarks": wire["openingRemarks"],
-            "style": json.loads(wire["styleJson"]),
-            "player": json.loads(wire["playerJson"]),
-            "npcs": json.loads(wire["npcsJson"]),
-            "minions": json.loads(wire["minionsJson"]),
-            "scenes": json.loads(wire["scenesJson"]),
-        })
+        for attempt in range(2):
+            response = self._client.models.generate_content(
+                model=self._settings.gemini_text_model,
+                contents=f"{PLAN_SYSTEM_PROMPT}\n\n{PLAN_OUTPUT_LAYOUT}\n\nUser premise:\n{prompt}",
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=GAME_PLAN_WIRE_SCHEMA,
+                ),
+            )
+            if not response.text:
+                raise ValueError("Gemini returned no structured game plan")
+            try:
+                wire = json.loads(response.text)
+                nested = {
+                    "title": wire["title"],
+                    "openingRemarks": wire["openingRemarks"],
+                    "style": json.loads(wire["styleJson"]),
+                    "player": json.loads(wire["playerJson"]),
+                    "npcs": json.loads(wire["npcsJson"]),
+                    "minions": json.loads(wire["minionsJson"]),
+                    "scenes": json.loads(wire["scenesJson"]),
+                }
+            except json.JSONDecodeError as exc:
+                if attempt == 0:
+                    continue
+                raise ValueError("Gemini returned malformed structured game-plan JSON twice") from exc
+            for scene in nested["scenes"]:
+                rectangles = scene.get("collisionRectangles")
+                if isinstance(rectangles, list) and len(rectangles) > 12:
+                    scene["collisionRectangles"] = [
+                        rectangle.model_dump(mode="json", by_alias=True)
+                        for rectangle in FALLBACK_COLLISIONS
+                    ]
+            return GamePlan.model_validate(nested)
+        raise AssertionError("unreachable game-plan retry state")
 
     def _generate_image(
         self, prompt: str, references: list[bytes] | None = None, aspect_ratio: str = "1:1"
@@ -285,8 +317,10 @@ class GeminiGenerator:
     @staticmethod
     def _style_prompt(plan: GamePlan) -> str:
         return (
+            f"{GLOBAL_VISUAL_ANCHOR} "
             f"Shared game palette: {', '.join(plan.style.palette)}. "
-            f"World: {plan.style.world_description}. Keep lighting and scale consistent across all assets."
+            f"World: {plan.style.world_description}. "
+            f"Canonical player: {plan.player.name}, {plan.player.description}."
         )
 
     @staticmethod
