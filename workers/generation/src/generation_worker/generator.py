@@ -30,12 +30,17 @@ from .settings import Settings
 
 
 PLAN_SYSTEM_PROMPT = """
-Create a compact, original, playable top-down whimsical fairytale RPG plan from the user's premise.
+Create a compact, playable top-down 2D JRPG plan from the user's premise.
 This request is only for the plan; do not describe image files or generate assets.
-Use one coherent art direction and palette for the whole game. Keep the cast and map
-small enough for a short demo. Dialogue speakers must exactly match the player or an
-NPC name. The world is exactly 2560x1440. Keep a clear traversable route from the
-player spawn to the exit and use only simple axis-aligned collision rectangles.
+Preserve explicit character appearances, setting details, story events, and the order
+and meaning of any dialogue in the premise. Add brief connective dialogue only when
+the premise contains none. Use one coherent palette. Keep the cast and map small
+enough for a short demo. Dialogue speakers must exactly match the player or an NPC
+name. The world is exactly 2560x1440. Place the player spawn and exit on solid walkable
+ground along a clear central route, never in water, void, cliffs, or a building.
+Use only simple axis-aligned collision rectangles.
+artDirection must describe classic 2D JRPG pixel art. worldDescription and location
+must describe places and objects, without competing visual-medium instructions.
 """.strip()
 
 PLAN_OUTPUT_LAYOUT = """
@@ -69,30 +74,19 @@ GAME_PLAN_WIRE_SCHEMA = {
     ],
 }
 
-BACKGROUND_COASTAL_WORKSHOP_PROMPT = (
-    "peaceful seaside meadow and windmill workshop at sunrise, vibrant translucent turquoise "
-    "and mint-green ocean water with soft white seafoam ripples, warm cream sandy coastline, "
-    "lush soft-pastel green grass with scattered glowing yellow blossoms, cozy timber windmill "
-    "cottage with cedar shingles and stone base, gentle pastel peach and dawn blue sky gradient, "
-    "soft diffused morning sunlight with zero harsh black shadows, clean modern 2D pixel art "
-    "textures, strictly 2D orthographic flat layout, zero 3D vanishing points, zero muddy earth tones"
+DEFAULT_ART_DIRECTION = "Classic 2D JRPG pixel art with a consistent palette and crisp square pixels"
+DEFAULT_SPRITE_BASE = (
+    ", classic 2D JRPG pixel art sprite sheet, 1.5 to 2-head-tall chibi proportions, "
+    "distinct 1-pixel dark outline, retro pixel cluster shading, strictly 2D flat orthographic "
+    "front/side view, solid pure chroma-green (#00FF00) background, sharp nearest-neighbor "
+    "pixel edges, zero smooth vector art, zero blurry lines"
 )
-
-PLAYER_LITTLE_WITCH_PROMPT = (
-    "chibi 2-head-tall apprentice little witch, extremely oversized floppy pointed witch hat "
-    "drooping slightly at the tip, cute layered anime bangs, big sparkling expressive dot-matrix "
-    "anime eyes with bright specular catchlights, cozy indigo capelet cloak with golden star trims "
-    "and leather potion satchel, tiny round feet, clean 1-pixel dark outline, smooth hue-shifted "
-    "pastel pixel shading, strictly 2D orthographic front-facing view, solid pure chroma-green "
-    "(#00FF00) background, vibrant cozy indie aesthetic"
+DEFAULT_SCENE_BASE = (
+    ", masterpiece 2D JRPG pixel art environmental tilemap, authentic retro 16-bit RPG "
+    "aesthetic, clean pixel textures, strictly 2D orthographic top-down flat grid projection, "
+    "zero 3D perspective distortion, zero vanishing points, zero smooth gradients"
 )
-
-CHARACTER_FAIRYTALE_PROMPT = (
-    "adorable ultra-cute fairytale mascot, soft pastel palette, big sparkling expressive "
-    "eyes, charming clean proportions, soft magical rim lighting, premium modern indie game "
-    "character, crisp clean outline, solid pure chroma-green (#00FF00) background, zero "
-    "dirty colors, zero uncanny facial features"
-)
+SCENE_RENDER_GUARD = ", tile alignment is invisible; no drawn grid lines, guide squares, or tile boundaries"
 
 
 @dataclass(frozen=True)
@@ -121,37 +115,41 @@ class GeminiGenerator:
     def generate(self, prompt: str, output_prefix: str) -> GenerationOutput:
         # The plan is accepted before any image-generation work begins.
         plan = normalize_plan(self._generate_plan(prompt))
+        plan.style.art_direction = DEFAULT_ART_DIRECTION
         generated: list[GeneratedPlayableAsset] = []
         style = self._style_prompt(plan)
         player = plan.player
 
         stand = self._asset(
             generated, output_prefix, "player.stand", "PLAYER_STAND", "player/stand.png",
-            normalize_single_sprite(self._generate_image(
-                f"{style}\n{PLAYER_LITTLE_WITCH_PROMPT}. Single full-body front-facing character. "
+            normalize_single_sprite(self._generate_image(self._sprite_prompt(
+                style, "Exactly one full-body front-facing character, centered on an empty canvas. "
                 f"Character: {player.name}. Canonical appearance: {player.description}. No text, scenery, "
                 "floor, props, environmental vignette, or drop shadow. Fill every pixel outside the character "
                 "silhouette with exactly #00FF00."
-            )), 128, 128, True,
+            ))), 128, 128, True,
         )
         directions: dict[str, GeneratedPlayableAsset] = {}
         for direction in ("down", "up", "right"):
             directions[direction] = self._asset(
                 generated, output_prefix, f"player.{direction}", "PLAYER_DIRECTION",
                 f"player/{direction}.png",
-                normalize_sprite_strip(self._generate_image(
-                    f"{style}\n{PLAYER_LITTLE_WITCH_PROMPT}. Create exactly three equally spaced horizontal "
-                    f"animation frames, all facing {direction}: contact, passing, contact. No text. "
+                normalize_sprite_strip(self._generate_image(self._sprite_prompt(
+                    style, "Create one and only one horizontal row of exactly three equally spaced "
+                    f"whole-character animation frames, all facing {direction}: contact, passing, contact. "
+                    "One character per frame, no second row, no stacked or partial duplicates. No text. "
+                    f"Character: {player.name}. Canonical appearance: {player.description}. "
                     "Preserve the reference character exactly. No scenery, floor, props, or drop shadow; "
-                    "every pixel outside the three silhouettes must be exactly #00FF00.",
+                    "every pixel outside the three silhouettes must be exactly #00FF00."),
                     [stand.body], aspect_ratio="16:9",
                 )), 384, 128, True,
             )
         player_avatar = self._asset(
             generated, output_prefix, "player.avatar", "PLAYER_AVATAR", "player/avatar.png",
-            normalize_avatar(self._generate_image(
-                f"{style}\n{PLAYER_LITTLE_WITCH_PROMPT}. Head-and-shoulders dialogue portrait of {player.name}. "
-                "Preserve the reference identity and outfit. Neutral expression, no text.", [stand.body]
+            normalize_avatar(self._generate_image(self._sprite_prompt(
+                style, f"Head-and-shoulders dialogue portrait of {player.name}. "
+                f"Canonical appearance: {player.description}. Preserve the reference identity and "
+                "outfit. Neutral expression, no text."), [stand.body]
             )), 256, 256, True,
         )
 
@@ -159,17 +157,19 @@ class GeminiGenerator:
         for npc in plan.npcs:
             sprite = self._asset(
                 generated, output_prefix, f"npc.{npc.id}.sprite", "NPC_SPRITE", f"npcs/{npc.id}/sprite.png",
-                normalize_single_sprite(self._generate_image(
-                    f"{style}\n{CHARACTER_FAIRYTALE_PROMPT}. Single full-body side-facing RPG character. NPC: {npc.name}. "
-                    f"Canonical appearance: {npc.description}. Match the reference hero's visual language. No text.",
+                normalize_single_sprite(self._generate_image(self._sprite_prompt(
+                    style, f"Exactly one full-body side-facing RPG character, centered on an empty "
+                    f"canvas; no repeated copies, poses, panels, or contact sheet. NPC: {npc.name}. "
+                    f"Canonical appearance: {npc.description}. Match the reference hero's pixel scale "
+                    "and palette. No text or scenery."),
                     [stand.body],
                 )), 128, 128, True,
             )
             avatar = self._asset(
                 generated, output_prefix, f"npc.{npc.id}.avatar", "NPC_AVATAR", f"npcs/{npc.id}/avatar.png",
-                normalize_avatar(self._generate_image(
-                    f"{style}\n{CHARACTER_FAIRYTALE_PROMPT}. Head-and-shoulders dialogue portrait of {npc.name}; "
-                    "preserve the referenced identity. No text.", [sprite.body]
+                normalize_avatar(self._generate_image(self._sprite_prompt(
+                    style, f"Head-and-shoulders dialogue portrait of {npc.name}. Canonical appearance: "
+                    f"{npc.description}. Preserve the referenced identity. No text or scenery."), [sprite.body]
                 )), 256, 256, True,
             )
             playable_npcs.append(PlayableCharacter(
@@ -182,10 +182,11 @@ class GeminiGenerator:
             sprite = self._asset(
                 generated, output_prefix, f"minion.{minion.id}.sprite", "MINION_SPRITE",
                 f"minions/{minion.id}/sprite.png",
-                normalize_single_sprite(self._generate_image(
-                    f"{style}\n{CHARACTER_FAIRYTALE_PROMPT}. Single full-body side-facing RPG creature. "
-                    f"Creature: {minion.name}. "
-                    f"Canonical appearance: {minion.description}. Match the reference art direction. No text.",
+                normalize_single_sprite(self._generate_image(self._sprite_prompt(
+                    style, f"Exactly one full-body side-facing RPG creature, centered on an empty "
+                    f"canvas; no repeated copies, poses, panels, or contact sheet. Creature: {minion.name}. "
+                    f"Canonical appearance: {minion.description}. Match the reference hero's pixel scale "
+                    "and palette. No text or scenery."),
                     [stand.body],
                 )), 128, 128, True,
             )
@@ -199,13 +200,13 @@ class GeminiGenerator:
             background = self._asset(
                 generated, output_prefix, f"scene.{scene.id}.background", "SCENE_BACKGROUND",
                 f"scenes/{scene.id}/background.png",
-                normalize_background(self._generate_image(
-                    f"{style}\n{BACKGROUND_COASTAL_WORKSHOP_PROMPT}. No characters, no text. Location: {scene.location}. "
-                    "Show a clearly walkable central route with the windmill in the upper middle-right, a compact "
-                    "rock cluster below center, and low bushes toward the lower-right edge. Keep blocking props in "
-                    "separate compact clusters away from the central route. Collision geometry is invisible gameplay "
-                    "metadata and is intentionally not supplied to the image model. Never draw rectangle outlines, "
-                    "numbers, coordinate labels, guides, debug overlays, borders, or UI. Exact 16:9 composition.",
+                normalize_background(self._generate_image(self._scene_prompt(
+                    style, f"Location: {scene.location}. Show continuous solid walkable ground "
+                    "through the middle horizontal band from left-of-center to right-of-center; "
+                    "place water, cliffs, and buildings outside that route. Keep blocking scenery "
+                    "in separate compact clusters away from it. Collision geometry "
+                    "is invisible gameplay metadata. No characters, text, numbers, coordinate labels, "
+                    "guides, debug overlays, borders, or UI. Exact 16:9 composition."),
                     aspect_ratio="16:9",
                 )), 2560, 1440, False,
             )
@@ -284,11 +285,17 @@ class GeminiGenerator:
     @staticmethod
     def _style_prompt(plan: GamePlan) -> str:
         return (
-            f"Shared game art direction: {plan.style.art_direction}. Palette: {', '.join(plan.style.palette)}. "
-            f"World: {plan.style.world_description}. Modern high-aesthetic whimsical storybook game illustration, "
-            "consistent scale, clean orthographic 2D projection, vibrant luminous pastel palette, warm magical "
-            "lighting, original characters, no typography, no muddy browns, no dull colors."
+            f"Shared game palette: {', '.join(plan.style.palette)}. "
+            f"World: {plan.style.world_description}. Keep lighting and scale consistent across all assets."
         )
+
+    @staticmethod
+    def _sprite_prompt(style: str, subject: str) -> str:
+        return f"{style}\n{subject.rstrip(' .')}{DEFAULT_SPRITE_BASE}"
+
+    @staticmethod
+    def _scene_prompt(style: str, setting: str) -> str:
+        return f"{style}\n{setting.rstrip(' .')}{DEFAULT_SCENE_BASE}{SCENE_RENDER_GUARD}"
 
     @staticmethod
     def _asset(

@@ -88,6 +88,14 @@ def remove_edge_background(image: Image.Image, threshold: int = 235) -> Image.Im
             elif dominance >= 12:
                 pixels[x, y] = (red, max(red, blue), blue, alpha)
 
+    # JPEG can leave isolated chroma-green specks inside a silhouette that are
+    # not edge-connected. Treat strongly green pixels as key color everywhere.
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha and green >= 170 and green - max(red, blue) >= 100:
+                pixels[x, y] = (0, 0, 0, 0)
+
     # Pixel art must never contain a semi-transparent antialiasing halo.
     for y in range(height):
         for x in range(width):
@@ -158,16 +166,62 @@ def harden_alpha(image: Image.Image) -> Image.Image:
     return image
 
 
+def pixel_grid(image: Image.Image, scale: int, colors: int) -> Image.Image:
+    """Use a fixed logical grid and a nondithered palette for hard pixel edges."""
+    logical_size = (image.width // scale, image.height // scale)
+    logical = image.resize(logical_size, Image.Resampling.NEAREST)
+    alpha = logical.getchannel("A") if logical.mode == "RGBA" else None
+    rgb = logical.convert("RGB").quantize(
+        colors=colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE
+    ).convert("RGB")
+    if alpha is not None:
+        rgb = rgb.convert("RGBA")
+        rgb.putalpha(alpha)
+    return rgb.resize(image.size, Image.Resampling.NEAREST)
+
+
+def largest_opaque_component_fraction(image: Image.Image) -> float:
+    alpha = image.getchannel("A")
+    pixels = alpha.load()
+    seen: set[tuple[int, int]] = set()
+    largest = 0
+    total = 0
+    for y in range(image.height):
+        for x in range(image.width):
+            if pixels[x, y] == 0 or (x, y) in seen:
+                continue
+            queue = deque([(x, y)])
+            seen.add((x, y))
+            size = 0
+            while queue:
+                current_x, current_y = queue.popleft()
+                size += 1
+                for next_x, next_y in (
+                    (current_x - 1, current_y), (current_x + 1, current_y),
+                    (current_x, current_y - 1), (current_x, current_y + 1),
+                ):
+                    neighbor = (next_x, next_y)
+                    if (0 <= next_x < image.width and 0 <= next_y < image.height
+                            and pixels[next_x, next_y] != 0 and neighbor not in seen):
+                        seen.add(neighbor)
+                        queue.append(neighbor)
+            total += size
+            largest = max(largest, size)
+    return largest / total if total else 0
+
+
 def normalize_single_sprite(value: bytes, size: tuple[int, int] = (128, 128)) -> bytes:
     image = remove_edge_background(decode_image(value))
     box = image.getbbox()
     if box is None:
         raise ValueError("generated sprite contains no visible pixels")
     character = image.crop(box)
-    character.thumbnail((int(size[0] * .88), int(size[1] * .9)), Image.Resampling.LANCZOS)
+    character.thumbnail((int(size[0] * .88), int(size[1] * .9)), Image.Resampling.NEAREST)
     canvas = Image.new("RGBA", size, (0, 0, 0, 0))
     canvas.alpha_composite(character, ((size[0] - character.width) // 2, size[1] - character.height))
-    canvas = harden_alpha(canvas)
+    canvas = pixel_grid(harden_alpha(canvas), 2, 128)
+    if largest_opaque_component_fraction(canvas) < 0.45:
+        raise ValueError("generated single sprite contains multiple disconnected figures")
     visible_pixels = sum(value > 0 for value in canvas.getchannel("A").getdata())
     if visible_pixels / (size[0] * size[1]) > 0.60:
         raise ValueError("generated sprite contains a scene or non-character background")
@@ -188,9 +242,9 @@ def normalize_sprite_strip(value: bytes) -> bytes:
         if box is None:
             raise ValueError(f"generated sprite strip frame {index + 1} is empty")
         frame = cell.crop(box)
-        frame.thumbnail((112, 116), Image.Resampling.LANCZOS)
+        frame.thumbnail((112, 116), Image.Resampling.NEAREST)
         output.alpha_composite(frame, (index * SPRITE_FRAME_WIDTH + (128 - frame.width) // 2, 128 - frame.height))
-    return encode_png(harden_alpha(output))
+    return encode_png(pixel_grid(harden_alpha(output), 2, 192))
 
 
 def normalize_avatar(value: bytes) -> bytes:
@@ -202,12 +256,16 @@ def normalize_avatar(value: bytes) -> bytes:
     image.thumbnail((240, 240), Image.Resampling.NEAREST)
     canvas = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
     canvas.alpha_composite(image, ((256 - image.width) // 2, 256 - image.height))
-    return encode_png(harden_alpha(canvas))
+    return encode_png(pixel_grid(harden_alpha(canvas), 2, 192))
 
 
 def normalize_background(value: bytes) -> bytes:
     image = decode_image(value).convert("RGB")
-    return encode_png(image.resize((2560, 1440), Image.Resampling.LANCZOS))
+    image = image.resize((640, 360), Image.Resampling.NEAREST)
+    image = image.quantize(
+        colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE
+    ).convert("RGB")
+    return encode_png(image.resize((2560, 1440), Image.Resampling.NEAREST))
 
 
 def validate_png(value: bytes, expected_size: tuple[int, int], require_transparency: bool) -> None:

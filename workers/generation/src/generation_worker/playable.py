@@ -216,15 +216,17 @@ FALLBACK_COLLISIONS = [
     CollisionRect(x=320, y=1024, width=320, height=256),
     CollisionRect(x=1920, y=1024, width=320, height=256),
 ]
+ANCHORED_SPAWN = Point(x=512, y=720)
+ANCHORED_EXIT = Point(x=2048, y=720)
 
 
 def normalize_plan(plan: GamePlan) -> GamePlan:
-    """Accept safe model geometry and replace unsafe maps deterministically."""
+    """Anchor the playable route; replace model blockers that make it unreachable."""
     normalized = plan.model_copy(deep=True)
     for scene in normalized.scenes:
+        scene.player_spawn = ANCHORED_SPAWN.model_copy()
+        scene.exit = ANCHORED_EXIT.model_copy()
         if not _map_is_safe(scene.player_spawn, scene.exit, scene.collision_rectangles):
-            scene.player_spawn = Point(x=128, y=720)
-            scene.exit = Point(x=2432, y=720)
             scene.collision_rectangles = list(FALLBACK_COLLISIONS)
     return GamePlan.model_validate(normalized.model_dump())
 
