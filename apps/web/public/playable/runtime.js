@@ -61,6 +61,8 @@ let prevLevelArrow;
 let playerAnimState = { dir: 'down', frame: 0, lastTime: 0 };
 let playerShadow = null;
 let foregroundProps = [];
+let ambientOverlay = null;
+let vignetteOverlay = null;
 
 // Battle Globals
 let isPaused = false;
@@ -355,6 +357,7 @@ function setupGame(logStep) {
 
     // B. UI
     setupUI.call(this);
+    setupAtmosphere.call(this);
     setupAudio.call(this);
 
     // C. Player
@@ -571,10 +574,10 @@ function setupUI() {
     this.updateBattleLayout();
 
     // Dialogue
-    dialogueBox = this.add.graphics().setScrollFactor(0).setDepth(1000).setVisible(false);
-    this.dialogueAvatar = this.add.image(0,0,'player_avatar').setScrollFactor(0).setVisible(false).setDepth(1001);
-    dialogueSpeaker = this.add.text(0,0,'',{fontSize:'22px',fill:'#ff0'}).setScrollFactor(0).setVisible(false).setDepth(1002);
-    dialogueText = this.add.text(0,0,'',{fontSize:'18px',fill:'#fff',wordWrap:{width:660}}).setScrollFactor(0).setVisible(false).setDepth(1002);
+    dialogueBox = this.add.graphics().setScrollFactor(0).setDepth(2100).setVisible(false);
+    this.dialogueAvatar = this.add.image(0,0,'player_avatar').setScrollFactor(0).setVisible(false).setDepth(2101);
+    dialogueSpeaker = this.add.text(0,0,'',{fontSize:'22px',fill:'#ff0'}).setScrollFactor(0).setVisible(false).setDepth(2102);
+    dialogueText = this.add.text(0,0,'',{fontSize:'18px',fill:'#fff',wordWrap:{width:660}}).setScrollFactor(0).setVisible(false).setDepth(2102);
     
     this.dialogueUiUpdate = () => {
         const w = this.cameras.main.width;
@@ -594,6 +597,39 @@ function setupUI() {
             advanceDialogue(this);
         }
     });
+}
+
+function setupAtmosphere() {
+    const overlayDepth = PLAYABLE_WORLD_HEIGHT + 10;
+    ambientOverlay = this.add.rectangle(0, 0, 1, 1, 0x26344a, 0.055)
+        .setOrigin(0, 0)
+        .setScrollFactor(0)
+        .setDepth(overlayDepth)
+        .setBlendMode(Phaser.BlendModes.MULTIPLY);
+    vignetteOverlay = this.add.graphics()
+        .setScrollFactor(0)
+        .setDepth(overlayDepth + 1);
+
+    const redrawAtmosphere = () => {
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const edgeX = Math.max(80, width * 0.16);
+        const edgeY = Math.max(60, height * 0.16);
+        ambientOverlay.setDisplaySize(width, height);
+        vignetteOverlay.clear();
+
+        vignetteOverlay.fillGradientStyle(0x07101c, 0x07101c, 0x07101c, 0x07101c, 0.16, 0.16, 0, 0);
+        vignetteOverlay.fillRect(0, 0, width, edgeY);
+        vignetteOverlay.fillGradientStyle(0x07101c, 0x07101c, 0x07101c, 0x07101c, 0, 0, 0.16, 0.16);
+        vignetteOverlay.fillRect(0, height - edgeY, width, edgeY);
+        vignetteOverlay.fillGradientStyle(0x07101c, 0x07101c, 0x07101c, 0x07101c, 0.12, 0, 0.12, 0);
+        vignetteOverlay.fillRect(0, 0, edgeX, height);
+        vignetteOverlay.fillGradientStyle(0x07101c, 0x07101c, 0x07101c, 0x07101c, 0, 0.12, 0, 0.12);
+        vignetteOverlay.fillRect(width - edgeX, 0, edgeX, height);
+    };
+
+    redrawAtmosphere();
+    this.scale.on('resize', redrawAtmosphere);
 }
 
 function initScene(index) {

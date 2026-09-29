@@ -39,6 +39,8 @@ class PlayableRuntimeSmokeTest(unittest.TestCase):
         self.assertIn("function setActorFootprint(actor)", runtime_source)
         self.assertIn("function addGroundShadow(scene, actor)", runtime_source)
         self.assertIn("actor.setDepth(actor.y)", runtime_source)
+        self.assertIn("function setupAtmosphere()", runtime_source)
+        self.assertIn("Phaser.BlendModes.MULTIPLY", runtime_source)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             shutil.copy2(RUNTIME / "index.html", root / "index.html")
