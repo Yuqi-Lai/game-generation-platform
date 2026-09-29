@@ -28,11 +28,17 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
 class PlayableRuntimeSmokeTest(unittest.TestCase):
     def test_v1_manifest_assets_resolve_and_phaser_creates_canvas(self):
+        runtime_source = (RUNTIME / "game.js").read_text(encoding="utf-8")
         self.assertEqual(
             (ROOT / "apps" / "web" / "public" / "playable" / "runtime.js").read_bytes(),
             (RUNTIME / "game.js").read_bytes(),
             "the platform runtime copy must stay byte-for-byte aligned with the preserved Phaser runtime",
         )
+        self.assertIn("pixelArt: true", runtime_source)
+        self.assertIn("const ACTOR_DISPLAY_HEIGHT = 128", runtime_source)
+        self.assertIn("function setActorFootprint(actor)", runtime_source)
+        self.assertIn("function addGroundShadow(scene, actor)", runtime_source)
+        self.assertIn("actor.setDepth(actor.y)", runtime_source)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             shutil.copy2(RUNTIME / "index.html", root / "index.html")
@@ -95,7 +101,8 @@ class PlayableRuntimeSmokeTest(unittest.TestCase):
                         "id": "workshop", "title": "Workshop", "location": "Workshop", "objective": "Repair beacon",
                         "npcIds": [], "minionIds": [], "dialogue": [],
                         "playerSpawn": {"x": 128, "y": 720}, "exit": {"x": 2432, "y": 720},
-                        "collisionRectangles": [], "backgroundAssetId": "scene.workshop.background",
+                        "collisionRectangles": [{"x": 700, "y": 200, "width": 300, "height": 300}],
+                        "backgroundAssetId": "scene.workshop.background",
                     }],
                     "assets": descriptors,
                 }

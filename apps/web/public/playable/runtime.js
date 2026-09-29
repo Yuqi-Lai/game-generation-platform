@@ -47,6 +47,10 @@ const PLAYABLE_WORLD_HEIGHT = 1440;
 const PLAYER_FRAME_WIDTH = 128;
 const PLAYER_FRAME_HEIGHT = 128;
 const PLAYER_FRAME_COUNT = 3;
+const ACTOR_DISPLAY_HEIGHT = 128;
+const MINION_DISPLAY_HEIGHT = 96;
+const ACTOR_FOOTPRINT_WIDTH = 64;
+const ACTOR_FOOTPRINT_HEIGHT = 32;
 let worldSize = { width: PLAYABLE_WORLD_WIDTH, height: PLAYABLE_WORLD_HEIGHT };
 let playableManifest = null;
 let playableAssets = new Map();
@@ -55,6 +59,8 @@ let bgSprite;
 let nextLevelArrow;
 let prevLevelArrow;
 let playerAnimState = { dir: 'down', frame: 0, lastTime: 0 };
+let playerShadow = null;
+let foregroundProps = [];
 
 // Battle Globals
 let isPaused = false;
@@ -354,7 +360,6 @@ function setupGame(logStep) {
     // C. Player
     if (this.textures.exists('player_down_sheet')) {
         player = this.physics.add.sprite(128, 128, 'player_down_sheet');
-        player.setDepth(100); // Ensure player is visible above background
         
         // Anims
         if (!this.anims.exists('walk-down')) {
@@ -365,19 +370,22 @@ function setupGame(logStep) {
             this.anims.create({ key: 'walk-right', frames: this.anims.generateFrameNumbers('player_right_sheet', { frames: walkFrames }), frameRate: 8, repeat: -1 });
         }
         
-        player.setScale(288 / 128); 
+        player.setScale(ACTOR_DISPLAY_HEIGHT / PLAYER_FRAME_HEIGHT);
         player.setCollideWorldBounds(true);
-        player.setSize(40, 90).setOffset(44, 20); 
+        setActorFootprint(player);
         player.setFrame(0);
+        playerShadow = addGroundShadow(this, player);
+        syncActorVisual(player);
         
         this.cameras.main.startFollow(player, true, 0.1, 0.1);
         this.cameras.main.setBounds(0, 0, worldSize.width, worldSize.height);
     } else {
         logStep("! Player texture missing");
         player = this.add.rectangle(128, 128, 64, 64, 0x00ff00);
-        player.setDepth(100);
         this.physics.add.existing(player);
         player.body.setCollideWorldBounds(true);
+        playerShadow = addGroundShadow(this, player);
+        syncActorVisual(player);
         this.cameras.main.startFollow(player);
     }
 
@@ -598,6 +606,9 @@ function initScene(index) {
     if (!this.textures.exists(bgKey)) bgKey = 'bg_placeholder';
     bgSprite.setTexture(bgKey).setDisplaySize(worldSize.width, worldSize.height);
 
+    foregroundProps.forEach(prop => prop.destroy());
+    foregroundProps = [];
+
     // Obstacles
     if (obstacles) obstacles.clear(true, true);
     obstacles = this.physics.add.staticGroup();
@@ -612,6 +623,18 @@ function initScene(index) {
         building.setVisible(false);
         this.physics.add.existing(building, true);
         obstacles.add(building);
+
+        // Re-render the painted obstacle region above actors whose feet have not
+        // crossed its base, allowing a flattened background to behave like a
+        // conventional orthographic tilemap foreground layer.
+        if (this.textures.exists(bgKey)) {
+            const prop = this.add.image(0, 0, bgKey)
+                .setOrigin(0, 0)
+                .setDisplaySize(worldSize.width, worldSize.height)
+                .setCrop(b.x, b.y, b.w, b.h)
+                .setDepth(b.y + b.h);
+            foregroundProps.push(prop);
+        }
     });
     this.physics.add.collider(player, obstacles);
 
@@ -626,7 +649,7 @@ function initScene(index) {
     }
 
     // NPCs
-    npcs.forEach(n => n.destroy());
+    npcs.forEach(destroyActorVisual);
     npcs = [];
     if (sceneData.npc) {
         sceneData.npc.forEach((npc, nIdx) => {
@@ -643,10 +666,11 @@ function initScene(index) {
             }
             
             const npcSprite = this.physics.add.sprite(npcSpawn.x, npcSpawn.y, tex);
-            const targetHeight = (player && player.displayHeight) ? player.displayHeight : 288;
-            npcSprite.setScale(targetHeight / (npcSprite.height||128));
+            npcSprite.setScale(ACTOR_DISPLAY_HEIGHT / (npcSprite.height || PLAYER_FRAME_HEIGHT));
             npcSprite.setImmovable(true);
-            npcSprite.setSize(40,56).setOffset(44,48);
+            setActorFootprint(npcSprite);
+            addGroundShadow(this, npcSprite);
+            syncActorVisual(npcSprite);
             npcSprite.setData('data', npc);
             if (npc.defeated) npcSprite.setTint(0x555555);
             npcSprite.setData('avatarKey', this.textures.exists(avatarKey) ? avatarKey : 'player_avatar');
@@ -684,9 +708,11 @@ function initScene(index) {
             }
 
             const mSprite = this.physics.add.sprite(minionSpawn.x, minionSpawn.y, tex);
-            mSprite.setScale(160 / (mSprite.height||128));
+            mSprite.setScale(MINION_DISPLAY_HEIGHT / (mSprite.height || PLAYER_FRAME_HEIGHT));
             mSprite.setImmovable(true);
-            mSprite.setSize(40,56).setOffset(44,48);
+            setActorFootprint(mSprite);
+            addGroundShadow(this, mSprite);
+            syncActorVisual(mSprite);
             
             // Minion Data
             mSprite.setData('data', minion);
@@ -819,6 +845,61 @@ function findSafeSpawn(buildings, existing, tries = 150) {
     return { x: sx, y: sy };
 }
 
+function setActorFootprint(actor) {
+    if (!actor || !actor.body) return;
+    const frameWidth = actor.frame?.realWidth || PLAYER_FRAME_WIDTH;
+    const frameHeight = actor.frame?.realHeight || PLAYER_FRAME_HEIGHT;
+    const width = Math.min(ACTOR_FOOTPRINT_WIDTH, Math.round(frameWidth * 0.5));
+    const height = Math.min(ACTOR_FOOTPRINT_HEIGHT, Math.round(frameHeight * 0.25));
+    actor.setSize(width, height).setOffset(
+        Math.round((frameWidth - width) / 2),
+        frameHeight - height - 4
+    );
+}
+
+function addGroundShadow(scene, actor) {
+    const shadow = scene.add.ellipse(
+        actor.x,
+        actor.y + actor.displayHeight * 0.42,
+        Math.max(24, actor.displayWidth * 0.5),
+        Math.max(8, actor.displayHeight * 0.12),
+        0x000000,
+        0.3
+    );
+    actor.setData('groundShadow', shadow);
+    return shadow;
+}
+
+function syncActorVisual(actor) {
+    if (!actor || !actor.active) return;
+    actor.setDepth(actor.y);
+    const shadow = actor.getData && actor.getData('groundShadow');
+    if (shadow) {
+        shadow.setPosition(actor.x, actor.y + actor.displayHeight * 0.42);
+        shadow.setDepth(actor.y - 1);
+        shadow.setVisible(actor.visible);
+    }
+    const prompt = actor.getData && actor.getData('prompt');
+    if (prompt) {
+        prompt.setPosition(actor.x, actor.y - actor.displayHeight * 0.55);
+        prompt.setDepth(actor.y + 1);
+    }
+}
+
+function destroyActorVisual(actor) {
+    if (!actor) return;
+    const shadow = actor.getData && actor.getData('groundShadow');
+    const prompt = actor.getData && actor.getData('prompt');
+    if (shadow) shadow.destroy();
+    if (prompt) prompt.destroy();
+    actor.destroy();
+}
+
+function updateActorDepths() {
+    syncActorVisual(player);
+    npcs.forEach(syncActorVisual);
+}
+
 function playWalkAnim(scene, dir) {
     const animKey = `walk-${dir}`;
     const sheetKey = (dir === 'left') ? 'player_right_sheet' : `player_${dir}_sheet`;
@@ -852,6 +933,7 @@ function playWalkAnim(scene, dir) {
 
 function update() {
     if (!player) return;
+    updateActorDepths();
 
     // Teleport
     const configuredExit = gameData[currentSceneIndex]?.exit;
@@ -1062,13 +1144,10 @@ function endBattle(scene, win) {
             // Mark as defeated in data so it doesn't respawn if we revisit (though initScene respawns from scratch usually)
             // Ideally we should update gameData but for now just destroy sprite
             currentTargetNpc.getData('data').defeated = true;
-            // Remove prompt
-            const p = currentTargetNpc.getData('prompt');
-            if (p) p.destroy();
-            currentTargetNpc.destroy();
             // Remove from npcs array
             const idx = npcs.indexOf(currentTargetNpc);
             if (idx > -1) npcs.splice(idx, 1);
+            destroyActorVisual(currentTargetNpc);
         } else {
             // NPC: Mark defeated, maybe change color or disable interaction
             currentTargetNpc.setTint(0x555555);
@@ -1076,6 +1155,7 @@ function endBattle(scene, win) {
             // Remove prompt
             const p = currentTargetNpc.getData('prompt');
             if (p) p.destroy();
+            currentTargetNpc.setData('prompt', null);
         }
     } else {
         playerStats.hp = 1;
