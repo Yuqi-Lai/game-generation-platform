@@ -6,8 +6,17 @@ import pytest
 from PIL import Image, ImageDraw
 from pydantic import ValidationError
 
-from generation_worker.generator import GeminiGenerator
-from generation_worker.image_processing import normalize_sprite_strip, validate_png
+from generation_worker.generator import (
+    BACKGROUND_PIXEL_ART_PROMPT,
+    SPRITE_PIXEL_ART_PROMPT,
+    GeminiGenerator,
+)
+from generation_worker.image_processing import (
+    normalize_background,
+    normalize_single_sprite,
+    normalize_sprite_strip,
+    validate_png,
+)
 from generation_worker.playable import (
     CombatStats,
     CollisionRect,
@@ -56,6 +65,17 @@ def synthetic_source_png() -> bytes:
     return output.getvalue()
 
 
+def synthetic_chroma_sprite() -> bytes:
+    image = Image.new("RGBA", (128, 128), "#00ff00")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((38, 22, 90, 119), fill=(245, 245, 245, 255))
+    draw.rectangle((40, 24, 88, 119), fill=(156, 64, 48, 255))
+    draw.rectangle((48, 8, 80, 42), fill=(224, 176, 128, 200))
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
 class SyntheticGeminiGenerator(GeminiGenerator):
     def __init__(self):
         self._settings = SimpleNamespace(
@@ -68,7 +88,7 @@ class SyntheticGeminiGenerator(GeminiGenerator):
     def _generate_plan(self, prompt: str) -> GamePlan:
         return synthetic_plan()
 
-    def _generate_image(self, prompt: str, references=None) -> bytes:
+    def _generate_image(self, prompt: str, references=None, aspect_ratio="1:1") -> bytes:
         self.image_calls += 1
         return synthetic_source_png()
 
@@ -78,6 +98,27 @@ def test_sprite_strip_is_exactly_three_128_pixel_frames_with_alpha():
     validate_png(strip, (384, 128), require_transparency=True)
     with Image.open(BytesIO(strip)) as image:
         assert image.width // 128 == 3
+
+
+def test_sprite_normalization_removes_chroma_and_forces_binary_alpha():
+    sprite = normalize_single_sprite(synthetic_chroma_sprite())
+    validate_png(sprite, (128, 128), require_transparency=True)
+    with Image.open(BytesIO(sprite)).convert("RGBA") as image:
+        assert set(image.getchannel("A").getdata()) <= {0, 255}
+        assert image.getpixel((0, 0)) == (0, 0, 0, 0)
+        assert not any(
+            alpha and green > 150 and green - red >= 55 and green - blue >= 55
+            for red, green, blue, alpha in image.getdata()
+        )
+
+
+def test_background_normalization_uses_32_color_four_pixel_grid():
+    background = normalize_background(synthetic_source_png())
+    validate_png(background, (2560, 1440), require_transparency=False)
+    with Image.open(BytesIO(background)).convert("RGB") as image:
+        assert len(image.getcolors(maxcolors=33)) <= 32
+        for x, y in ((0, 0), (400, 400), (1200, 800), (2400, 1200)):
+            assert len({image.getpixel((x + dx, y + dy)) for dx in range(4) for dy in range(4)}) == 1
 
 
 def test_unsafe_map_uses_anchored_traversable_fallback():
@@ -143,3 +184,20 @@ def test_synthetic_provider_builds_complete_playable_manifest_before_success():
     assert generator.image_calls == 6
     assert {asset.id for asset in output.assets} == {asset.id for asset in output.content.assets}
     assert all(asset.object_key.startswith("projects/p/jobs/j/attempts/a/") for asset in output.assets)
+
+
+def test_asset_prompts_lock_pixel_art_projection_palette_and_chroma_key():
+    prompts: list[tuple[str, str]] = []
+
+    class CapturingGenerator(SyntheticGeminiGenerator):
+        def _generate_image(self, prompt: str, references=None, aspect_ratio="1:1") -> bytes:
+            prompts.append((prompt, aspect_ratio))
+            return synthetic_source_png()
+
+    CapturingGenerator().generate("A clockwork rescue", "projects/p/jobs/j/attempts/a")
+
+    assert any(SPRITE_PIXEL_ART_PROMPT in prompt for prompt, _ in prompts)
+    assert any(BACKGROUND_PIXEL_ART_PROMPT in prompt for prompt, _ in prompts)
+    assert all("no gradients" in prompt for prompt, _ in prompts)
+    assert prompts[0][1] == "1:1"
+    assert any(BACKGROUND_PIXEL_ART_PROMPT in prompt and ratio == "16:9" for prompt, ratio in prompts)
