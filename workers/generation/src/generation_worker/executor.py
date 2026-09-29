@@ -13,7 +13,7 @@ from .failures import classify_failure
 
 
 class Generator(Protocol):
-    def generate(self, prompt: str) -> GenerationOutput: ...
+    def generate(self, prompt: str, output_prefix: str) -> GenerationOutput: ...
 
 
 class Storage(Protocol):
@@ -38,13 +38,29 @@ class GenerationExecutor:
             return GenerationExecutionFailed.model_validate(previous)
 
         try:
-            output = self._generator.generate(command.prompt)
-            content_key = f"{command.output_prefix}/content.json"
-            image_key = f"{command.output_prefix}/cover.png"
+            output = self._generator.generate(command.prompt, command.output_prefix)
+            content_key = f"{command.output_prefix}/playable-manifest.v1.json"
+            for generated in output.assets:
+                self._storage.put_bytes(generated.object_key, generated.body, generated.content_type)
             content_body = self._storage.put_json(
-                content_key, output.content.model_dump(mode="json")
+                content_key, output.content.model_dump(mode="json", by_alias=True)
             )
-            self._storage.put_bytes(image_key, output.image, output.image_content_type)
+            manifest_assets = [
+                GeneratedAsset(
+                    asset_type=generated.role,
+                    bucket=self._storage.bucket,
+                    key=generated.object_key,
+                    content_type=generated.content_type,
+                    size_bytes=len(generated.body),
+                    sha256=hashlib.sha256(generated.body).hexdigest(),
+                    metadata={
+                        "logicalAssetId": generated.id,
+                        "width": generated.width,
+                        "height": generated.height,
+                    },
+                )
+                for generated in output.assets
+            ]
             event: ResultEvent = GenerationExecutionSucceeded(
                 job_id=command.job_id,
                 attempt_id=command.attempt_id,
@@ -52,25 +68,17 @@ class GenerationExecutor:
                 model=output.model,
                 worker_execution_id=worker_execution_id,
                 title=output.content.title,
-                content=output.content.model_dump(mode="json"),
+                content=output.content.model_dump(mode="json", by_alias=True),
                 assets=[
                     GeneratedAsset(
-                        asset_type="CONTENT_JSON",
+                        asset_type="PLAYABLE_MANIFEST",
                         bucket=self._storage.bucket,
                         key=content_key,
                         content_type="application/json",
                         size_bytes=len(content_body),
                         sha256=hashlib.sha256(content_body).hexdigest(),
                     ),
-                    GeneratedAsset(
-                        asset_type="COVER_IMAGE",
-                        bucket=self._storage.bucket,
-                        key=image_key,
-                        content_type=output.image_content_type,
-                        size_bytes=len(output.image),
-                        sha256=hashlib.sha256(output.image).hexdigest(),
-                        metadata={"role": "cover"},
-                    ),
+                    *manifest_assets,
                 ],
             )
         except Exception as error:

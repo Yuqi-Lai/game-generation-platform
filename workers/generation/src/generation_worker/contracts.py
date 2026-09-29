@@ -78,25 +78,4 @@ class GenerationExecutionFailed(CamelModel):
     retryable: bool
 
 
-class Character(BaseModel):
-    name: str
-    outfit: str
-
-
-class Scene(BaseModel):
-    title: str
-    location: str
-    objective: str
-    dialogue: list[str] = Field(default_factory=list)
-
-
-class GameContent(BaseModel):
-    title: str
-    synopsis: str
-    opening_remarks: str
-    player: Character
-    npcs: list[Character]
-    scenes: list[Scene]
-
-
 ResultEvent = GenerationExecutionSucceeded | GenerationExecutionFailed

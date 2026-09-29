@@ -1,38 +1,74 @@
 from uuid import uuid4
 import httpx
 
-from generation_worker.contracts import (
-    Character,
-    GameContent,
-    GenerationExecutionRequested,
-    Scene,
-)
+import hashlib
+
+from generation_worker.contracts import GenerationExecutionRequested
 from generation_worker.executor import GenerationExecutor
-from generation_worker.generator import GenerationOutput
+from generation_worker.generator import GeneratedPlayableAsset, GenerationOutput
+from generation_worker.playable import (
+    AssetDescriptor,
+    CombatStats,
+    GamePlan,
+    PlanCharacter,
+    PlanScene,
+    PlayableGameContentV1,
+    PlayablePlayer,
+    PlayableScene,
+    PlayerAssets,
+    Point,
+    VisualStyle,
+)
 
 
 class FakeGenerator:
     def __init__(self):
         self.calls = 0
 
-    def generate(self, prompt: str) -> GenerationOutput:
+    def generate(self, prompt: str, output_prefix: str) -> GenerationOutput:
         self.calls += 1
+        body = b"synthetic-png"
+        specs = [
+            ("player.stand", "PLAYER_STAND", "stand.png", 128, 128),
+            ("player.down", "PLAYER_DIRECTION", "down.png", 384, 128),
+            ("player.up", "PLAYER_DIRECTION", "up.png", 384, 128),
+            ("player.right", "PLAYER_DIRECTION", "right.png", 384, 128),
+            ("player.avatar", "PLAYER_AVATAR", "avatar.png", 256, 256),
+            ("scene.workshop.background", "SCENE_BACKGROUND", "background.png", 2560, 1440),
+        ]
+        assets = [GeneratedPlayableAsset(
+            id=asset_id, role=role, object_key=f"{output_prefix}/{name}", body=body,
+            content_type="image/png", width=width, height=height,
+        ) for asset_id, role, name, width, height in specs]
         return GenerationOutput(
-            content=GameContent(
+            content=PlayableGameContentV1(
                 title="Synthetic Quest",
-                synopsis="A safe generated fixture.",
                 opening_remarks="The path opens.",
-                player=Character(name="Ari", outfit="green travel coat"),
-                npcs=[Character(name="Mira", outfit="blue workshop apron")],
-                scenes=[Scene(
-                    title="The Workshop",
-                    location="A bright clockwork workshop",
-                    objective="Repair the beacon",
-                    dialogue=["The beacon needs a new gear."],
+                style=VisualStyle(
+                    art_direction="Crisp clockwork pixel art",
+                    palette=["brass", "teal", "cream"],
+                    world_description="A bright clockwork city",
+                ),
+                player=PlayablePlayer(
+                    id="ari", name="Ari", description="A mechanic in a green coat",
+                    stats=CombatStats(hp=100, attack=10, defense=10),
+                    assets=PlayerAssets(
+                        stand="player.stand", down="player.down", up="player.up",
+                        right="player.right", avatar="player.avatar",
+                    ),
+                ),
+                scenes=[PlayableScene(
+                    id="workshop", title="The Workshop", location="A bright workshop",
+                    objective="Repair the beacon", player_spawn=Point(x=128, y=720),
+                    exit=Point(x=2432, y=720), background_asset_id="scene.workshop.background",
                 )],
+                assets=[AssetDescriptor(
+                    id=asset.id, role=asset.role, object_key=asset.object_key,
+                    content_type="image/png", width=asset.width, height=asset.height,
+                    sha256=hashlib.sha256(asset.body).hexdigest(),
+                ) for asset in assets],
             ),
-            image=b"synthetic-png-bytes",
-            image_content_type="image/png",
+            assets=assets,
             model="fake-text+fake-image",
         )
 
@@ -83,17 +119,17 @@ def test_success_stores_assets_and_reuses_result_for_duplicate_command():
 
     assert first.event_id == second.event_id
     assert first.event_type == "GenerationExecutionSucceeded"
-    assert len(first.assets) == 2
+    assert len(first.assets) == 7
     assert generator.calls == 1
-    assert f"{request.output_prefix}/content.json" in storage.values
-    assert f"{request.output_prefix}/cover.png" in storage.values
+    assert f"{request.output_prefix}/playable-manifest.v1.json" in storage.values
+    assert f"{request.output_prefix}/down.png" in storage.values
 
 
 class FailingGenerator:
     def __init__(self, error: Exception):
         self.error = error
 
-    def generate(self, prompt: str):
+    def generate(self, prompt: str, output_prefix: str):
         raise self.error
 
 

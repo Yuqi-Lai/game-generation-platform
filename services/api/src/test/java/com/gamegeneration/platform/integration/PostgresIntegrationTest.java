@@ -139,11 +139,21 @@ class PostgresIntegrationTest {
 				new GenerationApi.CreateGenerationRequest(UUID.randomUUID(), "Create an original forest puzzle."));
 		var job = generationJobs.findById(jobResponse.id()).orElseThrow();
 		var attempt = job.getActiveAttempt();
+		var playableManifest = objectMapper.readTree("""
+				{"version":"playable-game-content/v1","title":"Synthetic Forest",
+				 "world":{"width":2560,"height":1440,"tileSize":64},
+				 "player":{"assets":{"frameWidth":128,"frameHeight":128,"frameCount":3}},
+				 "scenes":[{"id":"forest","backgroundAssetId":"scene.forest.background"}],
+				 "assets":[{"id":"scene.forest.background","objectKey":"safe/background.png"}]}
+				""");
 		var event = new GenerationEvents.Succeeded(UUID.randomUUID(), GenerationEvents.SUCCEEDED, 1,
 				Instant.now(), job.getId(), attempt.getId(), attempt.getExecutionKey(), "GEMINI",
-				"test-model", "worker-1", "Synthetic Forest", objectMapper.readTree("{\"synopsis\":\"Safe fixture\"}"),
-				List.of(new GenerationEvents.Asset("CONTENT_JSON", "test-bucket", "safe/content.json",
-						"application/json", 24, "a".repeat(64), objectMapper.createObjectNode())));
+				"test-model", "worker-1", "Synthetic Forest", playableManifest,
+				List.of(
+						new GenerationEvents.Asset("PLAYABLE_MANIFEST", "test-bucket", "safe/playable-manifest.v1.json",
+								"application/json", 256, "a".repeat(64), objectMapper.createObjectNode()),
+						new GenerationEvents.Asset("SCENE_BACKGROUND", "test-bucket", "safe/background.png",
+								"image/png", 1024, "b".repeat(64), objectMapper.readTree("{\"logicalAssetId\":\"scene.forest.background\"}"))));
 		String payload = objectMapper.writeValueAsString(event);
 
 		resultProcessor.process(payload);
@@ -153,7 +163,9 @@ class PostgresIntegrationTest {
 		assertThat(completed.status()).isEqualTo("SUCCEEDED");
 		assertThat(completed.contentVersion().status()).isEqualTo("DRAFT");
 		assertThat(completed.contentVersion().versionNumber()).isEqualTo(1);
-		assertThat(completed.contentVersion().assets()).hasSize(1);
+		assertThat(completed.contentVersion().content().required("version").asText())
+				.isEqualTo("playable-game-content/v1");
+		assertThat(completed.contentVersion().assets()).hasSize(2);
 		assertThat(jdbc.queryForObject("select count(*) from content_version where source_generation_job_id = ?",
 				Integer.class, job.getId())).isEqualTo(1);
 	}

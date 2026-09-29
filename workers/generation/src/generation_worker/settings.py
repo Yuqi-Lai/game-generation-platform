@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     s3_region: str = "us-east-1"
     s3_endpoint_url: str | None = None
     s3_force_path_style: bool = False
+    playable_asset_base_url: str | None = None
 
     gemini_api_key: str
     gemini_text_model: str = "gemini-3.8-flash"

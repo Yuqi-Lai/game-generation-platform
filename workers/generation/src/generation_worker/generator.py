@@ -1,18 +1,57 @@
+from __future__ import annotations
+
 import base64
+import hashlib
 from dataclasses import dataclass
 
 from google import genai
 
-from .contracts import GameContent
-from .legacy_adapter import cover_prompt, structured_prompt
+from .image_processing import (
+    normalize_avatar,
+    normalize_background,
+    normalize_single_sprite,
+    normalize_sprite_strip,
+    validate_png,
+)
+from .playable import (
+    AssetDescriptor,
+    CharacterAssets,
+    GamePlan,
+    PlayableCharacter,
+    PlayableGameContentV1,
+    PlayablePlayer,
+    PlayableScene,
+    PlayerAssets,
+    normalize_plan,
+)
 from .settings import Settings
+
+
+PLAN_SYSTEM_PROMPT = """
+Create a compact, original, playable top-down 16-bit RPG plan from the user's premise.
+This request is only for the plan; do not describe image files or generate assets.
+Use one coherent art direction and palette for the whole game. Keep the cast and map
+small enough for a short demo. Dialogue speakers must exactly match the player or an
+NPC name. The world is exactly 2560x1440. Keep a clear traversable route from the
+player spawn to the exit and use only simple axis-aligned collision rectangles.
+""".strip()
+
+
+@dataclass(frozen=True)
+class GeneratedPlayableAsset:
+    id: str
+    role: str
+    object_key: str
+    body: bytes
+    content_type: str
+    width: int
+    height: int
 
 
 @dataclass(frozen=True)
 class GenerationOutput:
-    content: GameContent
-    image: bytes
-    image_content_type: str
+    content: PlayableGameContentV1
+    assets: list[GeneratedPlayableAsset]
     model: str
 
 
@@ -21,32 +60,165 @@ class GeminiGenerator:
         self._settings = settings
         self._client = genai.Client(api_key=settings.gemini_api_key)
 
-    def generate(self, prompt: str) -> GenerationOutput:
-        content_interaction = self._client.interactions.create(
-            model=self._settings.gemini_text_model,
-            input=structured_prompt(prompt),
-            response_format={
-                "type": "text",
-                "mime_type": "application/json",
-                "schema": GameContent.model_json_schema(),
-            },
+    def generate(self, prompt: str, output_prefix: str) -> GenerationOutput:
+        # The plan is accepted before any image-generation work begins.
+        plan = normalize_plan(self._generate_plan(prompt))
+        generated: list[GeneratedPlayableAsset] = []
+        style = self._style_prompt(plan)
+        player = plan.player
+
+        stand = self._asset(
+            generated, output_prefix, "player.stand", "PLAYER_STAND", "player/stand.png",
+            normalize_single_sprite(self._generate_image(
+                f"{style}\nSingle full-body front-facing character on a pure white background. "
+                f"Character: {player.name}. Canonical appearance: {player.description}. No text or props."
+            )), 128, 128, True,
         )
-        content = GameContent.model_validate_json(content_interaction.output_text)
-        image_interaction = self._client.interactions.create(
-            model=self._settings.gemini_image_model,
-            input=cover_prompt(content),
-            response_format={
-                "type": "image",
-                "mime_type": "image/png",
-                "aspect_ratio": "16:9",
-                "image_size": "1K",
-            },
+        directions: dict[str, GeneratedPlayableAsset] = {}
+        for direction in ("down", "up", "right"):
+            directions[direction] = self._asset(
+                generated, output_prefix, f"player.{direction}", "PLAYER_DIRECTION",
+                f"player/{direction}.png",
+                normalize_sprite_strip(self._generate_image(
+                    f"{style}\nCreate exactly three equally spaced horizontal animation frames, all facing {direction}: "
+                    "contact, passing, contact. Pure white background, no text. Preserve the reference character exactly.",
+                    [stand.body],
+                )), 384, 128, True,
+            )
+        player_avatar = self._asset(
+            generated, output_prefix, "player.avatar", "PLAYER_AVATAR", "player/avatar.png",
+            normalize_avatar(self._generate_image(
+                f"{style}\nHead-and-shoulders dialogue portrait of {player.name}. Preserve the reference identity and outfit. "
+                "Neutral expression, pure white background, no text.", [stand.body]
+            )), 256, 256, True,
         )
-        if not image_interaction.output_image:
-            raise RuntimeError("Gemini returned no generated image")
+
+        playable_npcs: list[PlayableCharacter] = []
+        for npc in plan.npcs:
+            sprite = self._asset(
+                generated, output_prefix, f"npc.{npc.id}.sprite", "NPC_SPRITE", f"npcs/{npc.id}/sprite.png",
+                normalize_single_sprite(self._generate_image(
+                    f"{style}\nSingle full-body side-facing RPG character on pure white. NPC: {npc.name}. "
+                    f"Canonical appearance: {npc.description}. Match the reference hero's visual language. No text.",
+                    [stand.body],
+                )), 128, 128, True,
+            )
+            avatar = self._asset(
+                generated, output_prefix, f"npc.{npc.id}.avatar", "NPC_AVATAR", f"npcs/{npc.id}/avatar.png",
+                normalize_avatar(self._generate_image(
+                    f"{style}\nHead-and-shoulders dialogue portrait of {npc.name}; preserve the referenced identity. "
+                    "Pure white background, no text.", [sprite.body]
+                )), 256, 256, True,
+            )
+            playable_npcs.append(PlayableCharacter(
+                id=npc.id, name=npc.name, description=npc.description, stats=npc.stats,
+                assets=CharacterAssets(sprite=sprite.id, avatar=avatar.id),
+            ))
+
+        playable_minions: list[PlayableCharacter] = []
+        for minion in plan.minions:
+            sprite = self._asset(
+                generated, output_prefix, f"minion.{minion.id}.sprite", "MINION_SPRITE",
+                f"minions/{minion.id}/sprite.png",
+                normalize_single_sprite(self._generate_image(
+                    f"{style}\nSingle full-body side-facing RPG creature on pure white. Creature: {minion.name}. "
+                    f"Canonical appearance: {minion.description}. Match the reference art direction. No text.",
+                    [stand.body],
+                )), 128, 128, True,
+            )
+            playable_minions.append(PlayableCharacter(
+                id=minion.id, name=minion.name, description=minion.description, stats=minion.stats,
+                assets=CharacterAssets(sprite=sprite.id),
+            ))
+
+        playable_scenes: list[PlayableScene] = []
+        for scene in plan.scenes:
+            background = self._asset(
+                generated, output_prefix, f"scene.{scene.id}.background", "SCENE_BACKGROUND",
+                f"scenes/{scene.id}/background.png",
+                normalize_background(self._generate_image(
+                    f"{style}\nTop-down 16-bit RPG environment, no characters, no text. Location: {scene.location}. "
+                    "Show a clearly walkable central route with decorative structures away from the route. Exact 16:9 composition."
+                )), 2560, 1440, False,
+            )
+            playable_scenes.append(PlayableScene(
+                id=scene.id, title=scene.title, location=scene.location, objective=scene.objective,
+                npc_ids=scene.npc_ids, minion_ids=scene.minion_ids, dialogue=scene.dialogue,
+                player_spawn=scene.player_spawn, exit=scene.exit,
+                collision_rectangles=scene.collision_rectangles, background_asset_id=background.id,
+            ))
+
+        descriptors = [AssetDescriptor(
+            id=asset.id, role=asset.role, object_key=asset.object_key,
+            content_type=asset.content_type, width=asset.width, height=asset.height,
+            sha256=hashlib.sha256(asset.body).hexdigest(),
+        ) for asset in generated]
+        content = PlayableGameContentV1(
+            title=plan.title, opening_remarks=plan.opening_remarks, style=plan.style,
+            asset_base_url=self._settings.playable_asset_base_url,
+            player=PlayablePlayer(
+                id=player.id, name=player.name, description=player.description, stats=player.stats,
+                assets=PlayerAssets(
+                    stand=stand.id, down=directions["down"].id, up=directions["up"].id,
+                    right=directions["right"].id, avatar=player_avatar.id,
+                ),
+            ),
+            npcs=playable_npcs, minions=playable_minions, scenes=playable_scenes, assets=descriptors,
+        )
         return GenerationOutput(
-            content=content,
-            image=base64.b64decode(image_interaction.output_image.data),
-            image_content_type="image/png",
+            content=content, assets=generated,
             model=f"{self._settings.gemini_text_model}+{self._settings.gemini_image_model}",
         )
+
+    def _generate_plan(self, prompt: str) -> GamePlan:
+        interaction = self._client.interactions.create(
+            model=self._settings.gemini_text_model,
+            input=f"{PLAN_SYSTEM_PROMPT}\n\nUser premise:\n{prompt}",
+            response_format={
+                "type": "text", "mime_type": "application/json",
+                "schema": GamePlan.model_json_schema(by_alias=True),
+            },
+        )
+        if not interaction.output_text:
+            raise ValueError("Gemini returned no structured game plan")
+        return GamePlan.model_validate_json(interaction.output_text)
+
+    def _generate_image(self, prompt: str, references: list[bytes] | None = None) -> bytes:
+        inputs: list[dict[str, str]] = [{"type": "text", "text": prompt}]
+        for reference in references or []:
+            inputs.append({
+                "type": "image", "mime_type": "image/png",
+                "data": base64.b64encode(reference).decode("ascii"),
+            })
+        interaction = self._client.interactions.create(
+            model=self._settings.gemini_image_model,
+            input=inputs,
+            response_format={
+                "type": "image", "mime_type": "image/png", "aspect_ratio": "16:9", "image_size": "1K",
+            },
+        )
+        if not interaction.output_image:
+            raise RuntimeError("Gemini returned no generated image")
+        data = interaction.output_image.data
+        return base64.b64decode(data) if isinstance(data, str) else bytes(data)
+
+    @staticmethod
+    def _style_prompt(plan: GamePlan) -> str:
+        return (
+            f"Shared game art direction: {plan.style.art_direction}. Palette: {', '.join(plan.style.palette)}. "
+            f"World: {plan.style.world_description}. Crisp 16-bit top-down RPG pixel art, consistent lighting, "
+            "consistent scale, original characters, no typography."
+        )
+
+    @staticmethod
+    def _asset(
+        assets: list[GeneratedPlayableAsset], output_prefix: str, asset_id: str, role: str,
+        relative_key: str, body: bytes, width: int, height: int, transparency: bool,
+    ) -> GeneratedPlayableAsset:
+        validate_png(body, (width, height), transparency)
+        asset = GeneratedPlayableAsset(
+            id=asset_id, role=role, object_key=f"{output_prefix}/{relative_key}", body=body,
+            content_type="image/png", width=width, height=height,
+        )
+        assets.append(asset)
+        return asset
