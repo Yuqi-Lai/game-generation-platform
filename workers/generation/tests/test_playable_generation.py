@@ -7,8 +7,8 @@ from PIL import Image, ImageDraw
 from pydantic import ValidationError
 
 from generation_worker.generator import (
-    BACKGROUND_NEO_PIXEL_PROMPT,
-    SPRITE_NEO_PIXEL_PROMPT,
+    BACKGROUND_COASTAL_WORKSHOP_PROMPT,
+    PLAYER_LITTLE_WITCH_PROMPT,
     GeminiGenerator,
 )
 from generation_worker.image_processing import (
@@ -76,6 +76,17 @@ def synthetic_chroma_sprite() -> bytes:
     return output.getvalue()
 
 
+def synthetic_gradient_background() -> bytes:
+    image = Image.new("RGB", (256, 144))
+    pixels = image.load()
+    for y in range(image.height):
+        for x in range(image.width):
+            pixels[x, y] = (x, min(255, 80 + y), (x + y) % 256)
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
 class SyntheticGeminiGenerator(GeminiGenerator):
     def __init__(self):
         self._settings = SimpleNamespace(
@@ -112,13 +123,12 @@ def test_sprite_normalization_removes_chroma_and_forces_binary_alpha():
         )
 
 
-def test_background_normalization_uses_64_color_two_pixel_grid():
-    background = normalize_background(synthetic_source_png())
+def test_background_normalization_preserves_rich_color_transitions():
+    background = normalize_background(synthetic_gradient_background())
     validate_png(background, (2560, 1440), require_transparency=False)
     with Image.open(BytesIO(background)).convert("RGB") as image:
-        assert len(image.getcolors(maxcolors=65)) <= 64
-        for x, y in ((0, 0), (400, 400), (1200, 800), (2400, 1200)):
-            assert len({image.getpixel((x + dx, y + dy)) for dx in range(2) for dy in range(2)}) == 1
+        sampled = image.resize((256, 144), Image.Resampling.NEAREST)
+        assert len(set(sampled.getdata())) > 256
 
 
 def test_unsafe_map_uses_anchored_traversable_fallback():
@@ -186,7 +196,7 @@ def test_synthetic_provider_builds_complete_playable_manifest_before_success():
     assert all(asset.object_key.startswith("projects/p/jobs/j/attempts/a/") for asset in output.assets)
 
 
-def test_asset_prompts_lock_pixel_art_projection_palette_and_chroma_key():
+def test_asset_prompts_lock_fairytale_palette_layout_and_chroma_key():
     prompts: list[tuple[str, str]] = []
 
     class CapturingGenerator(SyntheticGeminiGenerator):
@@ -196,8 +206,21 @@ def test_asset_prompts_lock_pixel_art_projection_palette_and_chroma_key():
 
     CapturingGenerator().generate("A clockwork rescue", "projects/p/jobs/j/attempts/a")
 
-    assert any(SPRITE_NEO_PIXEL_PROMPT in prompt for prompt, _ in prompts)
-    assert any(BACKGROUND_NEO_PIXEL_PROMPT in prompt for prompt, _ in prompts)
-    assert all("no muddy colors" in prompt for prompt, _ in prompts)
+    assert any(PLAYER_LITTLE_WITCH_PROMPT in prompt for prompt, _ in prompts)
+    assert any(BACKGROUND_COASTAL_WORKSHOP_PROMPT in prompt for prompt, _ in prompts)
+    assert all("no muddy browns" in prompt for prompt, _ in prompts)
     assert prompts[0][1] == "1:1"
-    assert any(BACKGROUND_NEO_PIXEL_PROMPT in prompt and ratio == "16:9" for prompt, ratio in prompts)
+    assert any(
+        BACKGROUND_COASTAL_WORKSHOP_PROMPT in prompt and ratio == "16:9"
+        for prompt, ratio in prompts
+    )
+    assert not any(
+        forbidden in prompt.lower()
+        for prompt, _ in prompts
+        for forbidden in ("retro", "snes", "32-color", "pixel clusters")
+    )
+    assert not any("collisionrectangles" in prompt.lower() for prompt, _ in prompts)
+    assert not any("(700,600" in prompt for prompt, _ in prompts)
+    assert any("intentionally not supplied" in prompt for prompt, _ in prompts)
+    assert any("never draw rectangle outlines" in prompt.lower() for prompt, _ in prompts)
+    assert any("every pixel outside the character silhouette" in prompt for prompt, _ in prompts)
