@@ -42,6 +42,7 @@ let dialogueSpeaker;
 let keys;
 let profileKey;
 let obstacles;
+let obstacleCollider = null;
 const PLAYABLE_WORLD_WIDTH = 2560;
 const PLAYABLE_WORLD_HEIGHT = 1440;
 const PLAYER_FRAME_WIDTH = 128;
@@ -601,11 +602,11 @@ function setupUI() {
 
 function setupAtmosphere() {
     const overlayDepth = PLAYABLE_WORLD_HEIGHT + 10;
-    ambientOverlay = this.add.rectangle(0, 0, 1, 1, 0x26344a, 0.055)
+    ambientOverlay = this.add.rectangle(0, 0, 1, 1, 0xfff0cf, 0.035)
         .setOrigin(0, 0)
         .setScrollFactor(0)
         .setDepth(overlayDepth)
-        .setBlendMode(Phaser.BlendModes.MULTIPLY);
+        .setBlendMode(Phaser.BlendModes.SCREEN);
     vignetteOverlay = this.add.graphics()
         .setScrollFactor(0)
         .setDepth(overlayDepth + 1);
@@ -618,13 +619,13 @@ function setupAtmosphere() {
         ambientOverlay.setDisplaySize(width, height);
         vignetteOverlay.clear();
 
-        vignetteOverlay.fillGradientStyle(0x07101c, 0x07101c, 0x07101c, 0x07101c, 0.16, 0.16, 0, 0);
+        vignetteOverlay.fillGradientStyle(0x17253a, 0x17253a, 0x17253a, 0x17253a, 0.07, 0.07, 0, 0);
         vignetteOverlay.fillRect(0, 0, width, edgeY);
-        vignetteOverlay.fillGradientStyle(0x07101c, 0x07101c, 0x07101c, 0x07101c, 0, 0, 0.16, 0.16);
+        vignetteOverlay.fillGradientStyle(0x17253a, 0x17253a, 0x17253a, 0x17253a, 0, 0, 0.07, 0.07);
         vignetteOverlay.fillRect(0, height - edgeY, width, edgeY);
-        vignetteOverlay.fillGradientStyle(0x07101c, 0x07101c, 0x07101c, 0x07101c, 0.12, 0, 0.12, 0);
+        vignetteOverlay.fillGradientStyle(0x17253a, 0x17253a, 0x17253a, 0x17253a, 0.05, 0, 0.05, 0);
         vignetteOverlay.fillRect(0, 0, edgeX, height);
-        vignetteOverlay.fillGradientStyle(0x07101c, 0x07101c, 0x07101c, 0x07101c, 0, 0.12, 0, 0.12);
+        vignetteOverlay.fillGradientStyle(0x17253a, 0x17253a, 0x17253a, 0x17253a, 0, 0.05, 0, 0.05);
         vignetteOverlay.fillRect(width - edgeX, 0, edgeX, height);
     };
 
@@ -641,11 +642,18 @@ function initScene(index) {
     let bgKey = `bg_${index}`;
     if (!this.textures.exists(bgKey)) bgKey = 'bg_placeholder';
     bgSprite.setTexture(bgKey).setDisplaySize(worldSize.width, worldSize.height);
+    if (bgSprite.displayWidth !== worldSize.width || bgSprite.displayHeight !== worldSize.height) {
+        throw new Error('Background display size must match playable world coordinates');
+    }
 
     foregroundProps.forEach(prop => prop.destroy());
     foregroundProps = [];
 
     // Obstacles
+    if (obstacleCollider) {
+        obstacleCollider.destroy();
+        obstacleCollider = null;
+    }
     if (obstacles) obstacles.clear(true, true);
     obstacles = this.physics.add.staticGroup();
     let rawBuildings = sceneData.building_coordinates;
@@ -655,10 +663,18 @@ function initScene(index) {
     const obstacleBuildings = buildings.filter(b => !blocksTeleport(b, teleportClearance));
     const palette = [0x6f4a2f, 0x7a5534, 0x6a3f26, 0x7b4f30];
     obstacleBuildings.forEach((b, i) => {
-        const building = this.add.rectangle(b.x, b.y, b.w, b.h, palette[i % palette.length]).setOrigin(0, 0);
+        const building = this.add.rectangle(
+            b.x + b.w / 2,
+            b.y + b.h / 2,
+            b.w,
+            b.h,
+            palette[i % palette.length]
+        ).setOrigin(0.5);
         building.setVisible(false);
         this.physics.add.existing(building, true);
-        obstacles.add(building);
+        building.body.setSize(b.w, b.h);
+        building.body.updateFromGameObject();
+        obstacles.add(building, true);
 
         // Re-render the painted obstacle region above actors whose feet have not
         // crossed its base, allowing a flattened background to behave like a
@@ -672,7 +688,12 @@ function initScene(index) {
             foregroundProps.push(prop);
         }
     });
-    this.physics.add.collider(player, obstacles);
+    obstacleCollider = this.physics.add.collider(player, obstacles);
+    if (!obstacleCollider || !obstacleCollider.active) {
+        throw new Error('Player collision group failed to bind');
+    }
+    this.game.canvas.dataset.collisionBodies = String(obstacleBuildings.length);
+    this.game.canvas.dataset.playerCollisionBound = 'true';
 
     if (player && sceneData.player_spawn && Number.isFinite(sceneData.player_spawn.x) && Number.isFinite(sceneData.player_spawn.y)) {
         player.setPosition(sceneData.player_spawn.x, sceneData.player_spawn.y);

@@ -40,7 +40,10 @@ class PlayableRuntimeSmokeTest(unittest.TestCase):
         self.assertIn("function addGroundShadow(scene, actor)", runtime_source)
         self.assertIn("actor.setDepth(actor.y)", runtime_source)
         self.assertIn("function setupAtmosphere()", runtime_source)
-        self.assertIn("Phaser.BlendModes.MULTIPLY", runtime_source)
+        self.assertIn("Phaser.BlendModes.SCREEN", runtime_source)
+        self.assertIn("building.body.updateFromGameObject()", runtime_source)
+        self.assertIn("obstacleCollider = this.physics.add.collider(player, obstacles)", runtime_source)
+        self.assertIn("Background display size must match playable world coordinates", runtime_source)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             shutil.copy2(RUNTIME / "index.html", root / "index.html")
@@ -85,7 +88,7 @@ class PlayableRuntimeSmokeTest(unittest.TestCase):
                 manifest = {
                     "version": "playable-game-content/v1",
                     "title": "Synthetic Workshop",
-                    "openingRemarks": "The beacon needs a new gear.",
+                    "openingRemarks": "",
                     "style": {"artDirection": "Synthetic", "palette": ["teal", "brass", "cream"], "worldDescription": "Workshop"},
                     "world": {"width": 2560, "height": 1440, "tileSize": 64},
                     "assetBaseUrl": base_url,
@@ -127,6 +130,8 @@ class PlayableRuntimeSmokeTest(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("<canvas", result.stdout)
+                self.assertIn('data-collision-bodies="1"', result.stdout)
+                self.assertIn('data-player-collision-bound="true"', result.stdout)
                 server.shutdown()
                 thread.join(timeout=5)
 
