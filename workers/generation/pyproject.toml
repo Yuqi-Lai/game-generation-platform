@@ -7,15 +7,16 @@ name = "forge-generation-worker"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-  "boto3>=1.40,<2",
-  "confluent-kafka>=2.11,<3",
-  "google-genai>=1.30,<2",
-  "pydantic>=2.11,<3",
-  "pydantic-settings>=2.10,<3",
+  "boto3==1.40.40",
+  "confluent-kafka==2.11.1",
+  "google-genai==2.25.0",
+  "pillow==11.3.0",
+  "pydantic==2.12.5",
+  "pydantic-settings==2.11.0",
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8.4,<9"]
+test = ["pytest==8.4.2"]
 
 [project.scripts]
 generation-worker = "generation_worker.main:main"
