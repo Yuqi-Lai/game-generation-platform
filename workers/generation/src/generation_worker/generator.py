@@ -5,6 +5,7 @@ import hashlib
 from dataclasses import dataclass
 
 from google import genai
+from google.genai import types
 
 from .image_processing import (
     normalize_avatar,
@@ -34,6 +35,18 @@ Use one coherent art direction and palette for the whole game. Keep the cast and
 small enough for a short demo. Dialogue speakers must exactly match the player or an
 NPC name. The world is exactly 2560x1440. Keep a clear traversable route from the
 player spawn to the exit and use only simple axis-aligned collision rectangles.
+""".strip()
+
+PLAN_OUTPUT_LAYOUT = """
+Return exactly one JSON object with these camelCase fields:
+- title, openingRemarks
+- style: {artDirection, palette, worldDescription}
+- player: {id, name, description, stats: {hp, attack, defense}}
+- npcs and minions: arrays of the same character fields
+- scenes: [{id, title, location, objective, npcIds, minionIds,
+  dialogue: [{speaker, text}], playerSpawn: {x, y}, exit: {x, y},
+  collisionRectangles: [{x, y, width, height}]}]
+Do not add other fields.
 """.strip()
 
 
@@ -171,17 +184,17 @@ class GeminiGenerator:
         )
 
     def _generate_plan(self, prompt: str) -> GamePlan:
-        interaction = self._client.interactions.create(
+        response = self._client.models.generate_content(
             model=self._settings.gemini_text_model,
-            input=f"{PLAN_SYSTEM_PROMPT}\n\nUser premise:\n{prompt}",
-            response_format={
-                "type": "text", "mime_type": "application/json",
-                "schema": GamePlan.model_json_schema(by_alias=True),
-            },
+            contents=f"{PLAN_SYSTEM_PROMPT}\n\n{PLAN_OUTPUT_LAYOUT}\n\nUser premise:\n{prompt}",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema={"type": "object"},
+            ),
         )
-        if not interaction.output_text:
+        if not response.text:
             raise ValueError("Gemini returned no structured game plan")
-        return GamePlan.model_validate_json(interaction.output_text)
+        return GamePlan.model_validate_json(response.text)
 
     def _generate_image(self, prompt: str, references: list[bytes] | None = None) -> bytes:
         inputs: list[dict[str, str]] = [{"type": "text", "text": prompt}]

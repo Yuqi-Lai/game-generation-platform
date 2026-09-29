@@ -100,6 +100,25 @@ def test_contract_rejects_non_anchored_world_size_and_missing_asset_reference():
         output.content.__class__.model_validate(document)
 
 
+def test_plan_generation_uses_generate_content_structured_output_config():
+    captured = {}
+
+    class Models:
+        def generate_content(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(text=synthetic_plan().model_dump_json(by_alias=True))
+
+    generator = GeminiGenerator.__new__(GeminiGenerator)
+    generator._settings = SimpleNamespace(gemini_text_model="gemini-3.8-flash")
+    generator._client = SimpleNamespace(models=Models())
+
+    assert generator._generate_plan("An original test story").title == "Beacon Workshop"
+    assert captured["model"] == "gemini-3.8-flash"
+    assert captured["config"].response_mime_type == "application/json"
+    assert captured["config"].response_schema == {"type": "object"}
+    assert "collisionRectangles" in captured["contents"]
+
+
 def test_synthetic_provider_builds_complete_playable_manifest_before_success():
     generator = SyntheticGeminiGenerator()
     output = generator.generate("A clockwork rescue", "projects/p/jobs/j/attempts/a")
