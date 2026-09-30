@@ -8,15 +8,21 @@ import com.gamegeneration.platform.membership.ProjectMembershipId;
 import com.gamegeneration.platform.membership.ProjectMembershipRepository;
 import com.gamegeneration.platform.outbox.OutboxEvent;
 import com.gamegeneration.platform.outbox.OutboxEventRepository;
+import org.springframework.data.domain.PageRequest;
 import com.gamegeneration.platform.project.ProjectRepository;
 import com.gamegeneration.platform.project.ProjectRole;
 import com.gamegeneration.platform.project.ProjectStatus;
+import com.gamegeneration.platform.realtime.RealtimeEvent;
+import com.gamegeneration.platform.realtime.RealtimeEventTypes;
+import com.gamegeneration.platform.realtime.RealtimeNotifier;
 import com.gamegeneration.platform.shared.ConflictException;
 import com.gamegeneration.platform.shared.ForbiddenException;
 import com.gamegeneration.platform.shared.NotFoundException;
 import com.gamegeneration.platform.user.AppUser;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,13 +37,14 @@ public class GenerationService {
 	private final GenerationProperties properties;
 	private final CreditProperties creditProperties;
 	private final CreditService credits;
+	private final RealtimeNotifier realtime;
 	private final ObjectMapper objectMapper;
 
 	public GenerationService(ProjectRepository projects, ProjectMembershipRepository memberships,
 			GenerationJobRepository jobs, GenerationAttemptRepository attempts,
 			ContentAssetRepository assets, OutboxEventRepository outbox,
 			GenerationProperties properties, CreditProperties creditProperties,
-			CreditService credits, ObjectMapper objectMapper) {
+			CreditService credits, ObjectMapper objectMapper, RealtimeNotifier realtime) {
 		this.projects = projects;
 		this.memberships = memberships;
 		this.jobs = jobs;
@@ -48,6 +55,7 @@ public class GenerationService {
 		this.creditProperties = creditProperties;
 		this.credits = credits;
 		this.objectMapper = objectMapper;
+		this.realtime = realtime;
 	}
 
 	@Transactional
@@ -94,7 +102,9 @@ public class GenerationService {
 		requireEditor(actor, projectId);
 		var job = jobs.findForUpdate(jobId).orElseThrow(() -> new NotFoundException("Generation job not found"));
 		if (!job.getProject().getId().equals(projectId)) throw new NotFoundException("Generation job not found");
+		var previous = job.getStatus();
 		job.requestCancellation();
+		if (job.getStatus() != previous) notifyJob(job);
 		return response(job);
 	}
 
@@ -106,6 +116,7 @@ public class GenerationService {
 		var attempt = attempts.saveAndFlush(new GenerationAttempt(job, 1, "GEMINI"));
 		job.activate(attempt);
 		enqueueAttempt(job, attempt, properties.requestTopic());
+		notifyJob(job);
 		return response(job);
 	}
 
@@ -118,6 +129,38 @@ public class GenerationService {
 						job.getProject().getId(), job.getId(), attempt.getId()));
 		outbox.save(new OutboxEvent(eventId, "GenerationJob", job.getId(), GenerationEvents.REQUESTED,
 				topic, job.getId().toString(), objectMapper.writeValueAsString(event)));
+	}
+
+	void notifyJob(GenerationJob job) {
+		realtime.afterCommit(RealtimeEvent.now(RealtimeEventTypes.GENERATION_JOB_UPDATED,
+				job.getProject().getId(), job.getId(), Map.of(
+						"status", job.getStatus().name(),
+						"attemptNumber", job.getActiveAttempt() == null ? 0 : job.getActiveAttempt().getAttemptNumber())));
+	}
+
+	/**
+	 * A project's recent generation jobs, newest first.
+	 *
+	 * A job id otherwise exists only in the URL the generate flow redirects to,
+	 * which makes a finished generation unreachable once that page is gone.
+	 * Bounded like the credit ledger, so a long-lived project cannot turn its
+	 * own overview into an unbounded query.
+	 */
+	@Transactional(readOnly = true)
+	public List<GenerationApi.GenerationJobSummaryResponse> recentJobs(AppUser actor, UUID projectId) {
+		requireMember(actor, projectId);
+		return jobs.findAllByProjectIdOrderByCreatedAtDesc(projectId,
+				PageRequest.of(0, properties.historyLimit())).stream()
+				.map(job -> {
+					var version = job.getResultContentVersion();
+					return new GenerationApi.GenerationJobSummaryResponse(job.getId(),
+							job.getStatus().name(), job.getFailureCode(), job.getCreatedAt(),
+							job.getCompletedAt(),
+							job.getActiveAttempt() == null ? 0 : job.getActiveAttempt().getAttemptNumber(),
+							version == null ? null : version.getId(),
+							version == null ? null : version.getTitle());
+				})
+				.toList();
 	}
 
 	@Transactional(readOnly = true)

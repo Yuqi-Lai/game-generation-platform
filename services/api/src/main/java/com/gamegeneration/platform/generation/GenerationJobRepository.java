@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.time.Instant;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -12,6 +13,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface GenerationJobRepository extends JpaRepository<GenerationJob, UUID> {
 	List<GenerationJob> findAllByProjectIdOrderByCreatedAtDesc(UUID projectId);
+
+	List<GenerationJob> findAllByProjectIdOrderByCreatedAtDesc(UUID projectId, Pageable pageable);
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select job from GenerationJob job where job.id = :id")

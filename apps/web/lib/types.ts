@@ -86,6 +86,24 @@ export interface ReviewRequest {
   reviewers: ReviewAssignment[];
 }
 
+/**
+ * One job in a project's generation history.
+ *
+ * Lighter than `GenerationJob` on purpose: the list endpoint omits the content
+ * version and its assets so that listing a project does not query the asset
+ * table once per job.
+ */
+export interface GenerationJobSummary {
+  id: string;
+  status: GenerationJobStatus;
+  failureCode: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  attemptNumber: number;
+  contentVersionId: string | null;
+  contentVersionTitle: string | null;
+}
+
 export interface ContentVersion {
   id: string;
   projectId?: string;

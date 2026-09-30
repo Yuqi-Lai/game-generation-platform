@@ -3,7 +3,9 @@ package com.gamegeneration.platform.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.gamegeneration.platform.auth.AccessInvitation;
@@ -52,6 +54,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -63,6 +66,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 		"spring.kafka.listener.auto-startup=false",
 		"spring.kafka.admin.auto-create=false",
 		"spring.task.scheduling.enabled=false",
+		"app.realtime.enabled=false",
 		"app.generation.outbox-publish-delay-ms=3600000"
 })
 @AutoConfigureMockMvc
@@ -126,6 +130,48 @@ class PostgresIntegrationTest {
 
 		assertThat(users.findByAuthIssuerAndAuthSubject(
 				"https://auth.invalid/", "github|integration")).isPresent();
+	}
+
+	@Test
+	void projectSseRequiresAuthentication() throws Exception {
+		mockMvc.perform(get("/api/v1/projects/{projectId}/events", UUID.randomUUID())
+				.accept(MediaType.TEXT_EVENT_STREAM))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void projectMemberCanOpenAnSseConnection() throws Exception {
+		var owner = newUser("sse-owner");
+		var project = projectService.create(owner, new ProjectApi.CreateProjectRequest("Realtime", null));
+		mockMvc.perform(get("/api/v1/projects/{projectId}/events", project.id())
+				.accept(MediaType.TEXT_EVENT_STREAM)
+				.with(jwt().jwt(token -> token
+						.issuer(owner.getAuthIssuer())
+						.subject(owner.getAuthSubject())
+						.claim("aud", java.util.List.of("https://api.game-generation.local"))
+						.claim("email", owner.getEmail())
+						.claim("email_verified", true)
+						.claim("name", owner.getDisplayName()))))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
+				.andExpect(request().asyncStarted());
+	}
+
+	@Test
+	void authenticatedNonMemberCannotOpenAProjectSseConnection() throws Exception {
+		var owner = newUser("sse-project-owner");
+		var outsider = newUser("sse-outsider");
+		var project = projectService.create(owner, new ProjectApi.CreateProjectRequest("Private realtime", null));
+		mockMvc.perform(get("/api/v1/projects/{projectId}/events", project.id())
+				.accept(MediaType.TEXT_EVENT_STREAM)
+				.with(jwt().jwt(token -> token
+						.issuer(outsider.getAuthIssuer())
+						.subject(outsider.getAuthSubject())
+						.claim("aud", java.util.List.of("https://api.game-generation.local"))
+						.claim("email", outsider.getEmail())
+						.claim("email_verified", true)
+						.claim("name", outsider.getDisplayName()))))
+				.andExpect(status().isNotFound());
 	}
 
 	@Test
@@ -782,6 +828,51 @@ class PostgresIntegrationTest {
 				new GenerationApi.CreateGenerationRequest(UUID.randomUUID(), "Synthetic " + suffix));
 		return new JobFixture(fixture.actor(), fixture.projectId(),
 				generationJobs.findById(response.id()).orElseThrow());
+	}
+
+	/*
+	 * A project's generation history. Without this endpoint a finished job is
+	 * unreachable: its id exists only in the URL the generate flow redirects
+	 * to, so closing that page loses the result and its assets.
+	 */
+	@Test
+	void recentJobsListsAProjectsGenerationsNewestFirst() {
+		var fixture = fixture("job-history");
+		var first = generationService.create(fixture.actor(), fixture.projectId(),
+				new GenerationApi.CreateGenerationRequest(UUID.randomUUID(), "First world"));
+		var second = generationService.create(fixture.actor(), fixture.projectId(),
+				new GenerationApi.CreateGenerationRequest(UUID.randomUUID(), "Second world"));
+
+		var history = generationService.recentJobs(fixture.actor(), fixture.projectId());
+
+		assertThat(history).extracting(GenerationApi.GenerationJobSummaryResponse::id)
+				.containsExactly(second.id(), first.id());
+		assertThat(history).allSatisfy(entry -> {
+			assertThat(entry.status()).isEqualTo("QUEUED");
+			// No version yet, so the list must say so rather than omit the row.
+			assertThat(entry.contentVersionId()).isNull();
+			assertThat(entry.contentVersionTitle()).isNull();
+		});
+	}
+
+	@Test
+	void recentJobsIsScopedToTheProjectAndItsMembers() {
+		var mine = fixture("job-history-mine");
+		var theirs = fixture("job-history-theirs");
+		generationService.create(mine.actor(), mine.projectId(),
+				new GenerationApi.CreateGenerationRequest(UUID.randomUUID(), "My world"));
+
+		// Another project's history does not leak into this one.
+		assertThat(generationService.recentJobs(theirs.actor(), theirs.projectId())).isEmpty();
+
+		/*
+		 * A non-member gets "not found", not "forbidden". That is deliberate in
+		 * requireMember: a 403 would confirm the project exists to someone with
+		 * no access to it.
+		 */
+		org.assertj.core.api.Assertions.assertThatThrownBy(
+				() -> generationService.recentJobs(theirs.actor(), mine.projectId()))
+				.isInstanceOf(com.gamegeneration.platform.shared.NotFoundException.class);
 	}
 
 	private Fixture fixture(String suffix) {

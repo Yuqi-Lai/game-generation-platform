@@ -37,12 +37,23 @@ spring:
         acks: all
     listener:
       ack-mode: record
+  data:
+    redis:
+      repositories:
+        enabled: false
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:2s}
 
 server:
   port: ${PORT:8080}
   forward-headers-strategy: framework
 
 management:
+  health:
+    redis:
+      enabled: false
   endpoint:
     health:
       probes:
@@ -68,6 +79,7 @@ app:
     cancellation-grace-seconds: ${GENERATION_CANCELLATION_GRACE_SECONDS:5}
     sweep-delay-ms: ${GENERATION_SWEEP_DELAY_MS:5000}
     outbox-publish-delay-ms: ${OUTBOX_PUBLISH_DELAY_MS:1000}
+    history-limit: ${GENERATION_HISTORY_LIMIT:25}
   content-pack:
     request-topic: ${KAFKA_PACK_EXPORT_REQUEST_TOPIC:content-pack.export.requested.v1}
     result-topic: ${KAFKA_PACK_EXPORT_RESULT_TOPIC:content-pack.export.results.v1}
@@ -76,6 +88,12 @@ app:
     initial-project-grant: ${CREDIT_INITIAL_PROJECT_GRANT:100}
     generation-cost: ${CREDIT_GENERATION_COST:10}
     ledger-limit: ${CREDIT_LEDGER_LIMIT:50}
+  realtime:
+    enabled: ${REALTIME_ENABLED:true}
+    channel-prefix: ${REALTIME_CHANNEL_PREFIX:project}
+    heartbeat-interval-ms: ${REALTIME_HEARTBEAT_INTERVAL_MS:25000}
+    connection-timeout-ms: ${REALTIME_CONNECTION_TIMEOUT_MS:1800000}
+    redis-reconnect-ms: ${REALTIME_REDIS_RECONNECT_MS:5000}
   load-test:
     auth-enabled: ${LOAD_TEST_AUTH_ENABLED:false}
     auth-secret: ${LOAD_TEST_AUTH_SECRET:}

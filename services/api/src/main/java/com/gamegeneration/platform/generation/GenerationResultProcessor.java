@@ -13,7 +13,11 @@ import com.gamegeneration.platform.outbox.OutboxEvent;
 import com.gamegeneration.platform.outbox.OutboxEventRepository;
 import com.gamegeneration.platform.project.ProjectRepository;
 import com.gamegeneration.platform.review.ContentReviewService;
+import com.gamegeneration.platform.realtime.RealtimeEvent;
+import com.gamegeneration.platform.realtime.RealtimeEventTypes;
+import com.gamegeneration.platform.realtime.RealtimeNotifier;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,13 +36,14 @@ public class GenerationResultProcessor {
 	private final GenerationService generationService;
 	private final ContentReviewService contentReviews;
 	private final CreditService credits;
+	private final RealtimeNotifier realtime;
 
 	public GenerationResultProcessor(ObjectMapper objectMapper, InboxEventRepository inbox,
 			GenerationJobRepository jobs, GenerationAttemptRepository attempts,
 			ProjectRepository projects, ContentVersionRepository versions,
 			ContentAssetRepository assets, OutboxEventRepository outbox,
 			GenerationProperties properties, GenerationService generationService,
-			ContentReviewService contentReviews, CreditService credits) {
+			ContentReviewService contentReviews, CreditService credits, RealtimeNotifier realtime) {
 		this.objectMapper = objectMapper;
 		this.inbox = inbox;
 		this.jobs = jobs;
@@ -51,6 +56,7 @@ public class GenerationResultProcessor {
 		this.generationService = generationService;
 		this.contentReviews = contentReviews;
 		this.credits = credits;
+		this.realtime = realtime;
 	}
 
 	@Transactional
@@ -82,11 +88,13 @@ public class GenerationResultProcessor {
 			job.cancel();
 			credits.release(job);
 			record(eventId, event.eventType(), job, attempt, "CANCELLED", "Worker started after cancellation request");
+			generationService.notifyJob(job);
 			return;
 		}
 		attempt.start(event.workerExecutionId());
 		if (job.getStatus() == GenerationJobStatus.QUEUED) job.markRunning();
 		record(eventId, event.eventType(), job, attempt, "ACCEPTED", null);
+		generationService.notifyJob(job);
 	}
 
 	private void succeed(UUID eventId, GenerationEvents.Succeeded event) {
@@ -101,6 +109,7 @@ public class GenerationResultProcessor {
 			credits.release(job);
 			record(eventId, event.eventType(), job, attempt, "CANCELLED_LATE_RESULT",
 					"Success ignored because cancellation was requested");
+			generationService.notifyJob(job);
 			return;
 		}
 		if (job.getStatus() == GenerationJobStatus.QUEUED) job.markRunning();
@@ -124,6 +133,11 @@ public class GenerationResultProcessor {
 		job.succeed(version);
 		credits.capture(job);
 		record(eventId, event.eventType(), job, attempt, "ACCEPTED", null);
+		generationService.notifyJob(job);
+		realtime.afterCommit(RealtimeEvent.now(RealtimeEventTypes.CONTENT_VERSION_UPDATED,
+				job.getProject().getId(), version.getId(), Map.of(
+						"status", version.getStatus().name(),
+						"versionNumber", version.getVersionNumber())));
 	}
 
 	private void fail(UUID eventId, GenerationEvents.Failed event) {
@@ -137,6 +151,7 @@ public class GenerationResultProcessor {
 			job.cancel();
 			credits.release(job);
 			record(eventId, event.eventType(), job, attempt, "CANCELLED", "Failure received after cancellation request");
+			generationService.notifyJob(job);
 			return;
 		}
 		if (event.retryable() && attempt.getAttemptNumber() < properties.maxAttempts()) {
@@ -144,6 +159,7 @@ public class GenerationResultProcessor {
 			job.requeue(next);
 			generationService.enqueueAttempt(job, next, properties.retryTopic());
 			record(eventId, event.eventType(), job, attempt, "RETRY_SCHEDULED", "Scheduled attempt " + next.getAttemptNumber());
+			generationService.notifyJob(job);
 			return;
 		}
 		if (job.getStatus() == GenerationJobStatus.QUEUED) job.markRunning();
@@ -152,6 +168,7 @@ public class GenerationResultProcessor {
 		if (event.retryable()) publishDeadLetter(job, attempt, event);
 		record(eventId, event.eventType(), job, attempt,
 				event.retryable() ? "RETRIES_EXHAUSTED" : "NON_RETRYABLE_FAILURE", null);
+		generationService.notifyJob(job);
 	}
 
 	private ProcessingContext context(UUID eventId, String eventType, UUID jobId, UUID attemptId, UUID executionKey) {

@@ -4,9 +4,13 @@ import com.gamegeneration.platform.generation.GenerationJob;
 import com.gamegeneration.platform.membership.ProjectMembershipId;
 import com.gamegeneration.platform.membership.ProjectMembershipRepository;
 import com.gamegeneration.platform.project.Project;
+import com.gamegeneration.platform.realtime.RealtimeEvent;
+import com.gamegeneration.platform.realtime.RealtimeEventTypes;
+import com.gamegeneration.platform.realtime.RealtimeNotifier;
 import com.gamegeneration.platform.shared.NotFoundException;
 import com.gamegeneration.platform.user.AppUser;
 import java.util.UUID;
+import java.util.Map;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,21 +21,24 @@ public class CreditService {
 	private final CreditLedgerRepository ledger;
 	private final ProjectMembershipRepository memberships;
 	private final CreditProperties properties;
+	private final RealtimeNotifier realtime;
 
 	public CreditService(ProjectCreditAccountRepository accounts, CreditLedgerRepository ledger,
-			ProjectMembershipRepository memberships, CreditProperties properties) {
+			ProjectMembershipRepository memberships, CreditProperties properties, RealtimeNotifier realtime) {
 		this.accounts = accounts;
 		this.ledger = ledger;
 		this.memberships = memberships;
 		this.properties = properties;
+		this.realtime = realtime;
 	}
 
 	public void initialize(Project project) {
 		if (accounts.existsById(project.getId())) return;
 		long grant = properties.initialProjectGrant();
-		accounts.saveAndFlush(new ProjectCreditAccount(project, grant));
+		var account = accounts.saveAndFlush(new ProjectCreditAccount(project, grant));
 		if (grant > 0) ledger.save(new CreditLedgerEntry(project, null, grant, CreditMovementType.GRANT,
 				"project:" + project.getId() + ":initial-grant:v1"));
+		notifyBalance(account);
 	}
 
 	public void reserve(GenerationJob job) {
@@ -41,6 +48,7 @@ public class CreditService {
 		if (ledger.findByIdempotencyKey(key).isPresent()) return;
 		account.reserve(amount);
 		ledger.save(new CreditLedgerEntry(job.getProject(), job, amount, CreditMovementType.RESERVE, key));
+		notifyBalance(account);
 	}
 
 	public void capture(GenerationJob job) { settle(job, CreditMovementType.CAPTURE); }
@@ -55,6 +63,7 @@ public class CreditService {
 		if (ledger.findByIdempotencyKey(key(job, terminalOpposite(type))).isPresent()) return;
 		if (type == CreditMovementType.CAPTURE) account.capture(amount); else account.release(amount);
 		ledger.save(new CreditLedgerEntry(job.getProject(), job, amount, type, key));
+		notifyBalance(account);
 	}
 
 	@Transactional(readOnly = true)
@@ -94,5 +103,14 @@ public class CreditService {
 
 	private static CreditMovementType terminalOpposite(CreditMovementType type) {
 		return type == CreditMovementType.CAPTURE ? CreditMovementType.RELEASE : CreditMovementType.CAPTURE;
+	}
+
+	private void notifyBalance(ProjectCreditAccount account) {
+		realtime.afterCommit(RealtimeEvent.now(RealtimeEventTypes.CREDITS_UPDATED,
+				account.getProjectId(), account.getProjectId(), Map.of(
+						"totalGranted", account.getTotalGranted(),
+						"reserved", account.getReserved(),
+						"consumed", account.getConsumed(),
+						"available", account.available())));
 	}
 }

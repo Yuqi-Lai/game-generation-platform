@@ -33,6 +33,12 @@ public class GenerationController {
 				.formatted(projectId, created.id()))).body(created);
 	}
 
+	@GetMapping
+	public java.util.List<GenerationApi.GenerationJobSummaryResponse> list(@AuthenticationPrincipal Jwt jwt,
+			@PathVariable UUID projectId) {
+		return generations.recentJobs(authenticatedUsers.resolve(jwt), projectId);
+	}
+
 	@GetMapping("/{jobId}")
 	public GenerationApi.GenerationJobResponse get(@AuthenticationPrincipal Jwt jwt,
 			@PathVariable UUID projectId, @PathVariable UUID jobId) {

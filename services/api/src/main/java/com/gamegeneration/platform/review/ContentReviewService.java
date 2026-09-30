@@ -11,11 +11,15 @@ import com.gamegeneration.platform.membership.ProjectMembershipRepository;
 import com.gamegeneration.platform.project.ProjectRepository;
 import com.gamegeneration.platform.project.ProjectRole;
 import com.gamegeneration.platform.project.ProjectStatus;
+import com.gamegeneration.platform.realtime.RealtimeEvent;
+import com.gamegeneration.platform.realtime.RealtimeEventTypes;
+import com.gamegeneration.platform.realtime.RealtimeNotifier;
 import com.gamegeneration.platform.shared.ConflictException;
 import com.gamegeneration.platform.shared.ForbiddenException;
 import com.gamegeneration.platform.shared.NotFoundException;
 import com.gamegeneration.platform.user.AppUser;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -31,11 +35,12 @@ public class ContentReviewService {
 	private final ReviewAssignmentRepository assignments;
 	private final ReviewDecisionRepository decisions;
 	private final ObjectMapper objectMapper;
+	private final RealtimeNotifier realtime;
 
 	public ContentReviewService(ProjectRepository projects, ProjectMembershipRepository memberships,
 			ContentVersionRepository versions, ContentAssetRepository assets,
 			ReviewRequestRepository requests, ReviewAssignmentRepository assignments,
-			ReviewDecisionRepository decisions, ObjectMapper objectMapper) {
+			ReviewDecisionRepository decisions, ObjectMapper objectMapper, RealtimeNotifier realtime) {
 		this.projects = projects;
 		this.memberships = memberships;
 		this.versions = versions;
@@ -44,6 +49,7 @@ public class ContentReviewService {
 		this.assignments = assignments;
 		this.decisions = decisions;
 		this.objectMapper = objectMapper;
+		this.realtime = realtime;
 	}
 
 	@Transactional(readOnly = true)
@@ -94,6 +100,7 @@ public class ContentReviewService {
 			assignments.save(new ReviewAssignment(request, version, reviewer.getUser()));
 		}
 		version.submitForReview();
+		notifyReview(projectId, version, request);
 		return statusResponse(version, request);
 	}
 
@@ -134,6 +141,7 @@ public class ContentReviewService {
 			request.approve();
 			version.approve();
 		}
+		notifyReview(projectId, version, request);
 		return statusResponse(version, request);
 	}
 
@@ -144,7 +152,17 @@ public class ContentReviewService {
 					.orElseThrow(() -> new IllegalStateException("IN_REVIEW version has no open review request"));
 			request.supersede();
 			version.supersede();
+			notifyReview(projectId, version, request);
 		}
+	}
+
+	private void notifyReview(UUID projectId, ContentVersion version, ReviewRequest request) {
+		realtime.afterCommit(RealtimeEvent.now(RealtimeEventTypes.REVIEW_UPDATED,
+				projectId, request.getId(), Map.of(
+						"status", request.getStatus().name(),
+						"contentVersionId", version.getId().toString())));
+		realtime.afterCommit(RealtimeEvent.now(RealtimeEventTypes.CONTENT_VERSION_UPDATED,
+				projectId, version.getId(), Map.of("status", version.getStatus().name())));
 	}
 
 	private ContentReviewApi.ContentVersionResponse versionResponse(

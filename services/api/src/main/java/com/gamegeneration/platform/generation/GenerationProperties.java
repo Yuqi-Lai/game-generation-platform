@@ -12,4 +12,11 @@ public record GenerationProperties(
 		long timeoutSeconds,
 		long cancellationGraceSeconds,
 		long sweepDelayMs,
-		long outboxPublishDelayMs) {}
+		long outboxPublishDelayMs,
+		int historyLimit) {
+	public GenerationProperties {
+		if (historyLimit <= 0 || historyLimit > 200) {
+			throw new IllegalArgumentException("Generation history limit must be between 1 and 200");
+		}
+	}
+}

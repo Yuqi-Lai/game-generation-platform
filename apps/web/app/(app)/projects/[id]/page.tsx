@@ -4,24 +4,47 @@ import { ApiError, apiFetch } from "@/lib/api";
 import { GenerateContentForm } from "@/components/generate-content-form";
 import { ContentVersionReview } from "@/components/content-version-review";
 import { ContentPackManager } from "@/components/content-pack-manager";
-import type { ContentPack, ContentVersion, Project, ProjectCreditBalance, ProjectMember } from "@/lib/types";
+import { ProjectRealtimeRefresh } from "@/components/project-realtime-refresh";
+import { isPublicPortfolioMode } from "@/lib/deployment-mode";
+import { getShowcaseProject, SHOWCASE_JOB_HREF, SHOWCASE_PROJECT_ID } from "@/lib/showcase-data";
+import type { ContentPack, ContentVersion, GenerationJobSummary, Project, ProjectCreditBalance, ProjectMember } from "@/lib/types";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const showcase = isPublicPortfolioMode();
   let project: Project;
-  try {
-    project = await apiFetch<Project>(`/api/v1/projects/${encodeURIComponent(id)}`);
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) notFound();
-    throw error;
+  let members: ProjectMember[];
+  let versions: ContentVersion[];
+  let packs: ContentPack[];
+  let credits: ProjectCreditBalance;
+  let generations: GenerationJobSummary[];
+  /* The project's own prompt, for the showcase form's prefill. */
+  let brief: string | undefined;
+
+  if (showcase) {
+    const bundle = getShowcaseProject(id);
+    if (!bundle) notFound();
+    ({ project, members, versions, packs, credits, generations } = bundle);
+    brief = bundle.brief;
+  } else {
+    try {
+      project = await apiFetch<Project>(`/api/v1/projects/${encodeURIComponent(id)}`);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) notFound();
+      throw error;
+    }
+    [members, versions, packs, credits, generations] = await Promise.all([
+      apiFetch<ProjectMember[]>(`/api/v1/projects/${encodeURIComponent(id)}/members`),
+      apiFetch<ContentVersion[]>(`/api/v1/projects/${encodeURIComponent(id)}/content-versions`),
+      apiFetch<ContentPack[]>(`/api/v1/projects/${encodeURIComponent(id)}/content-packs`),
+      apiFetch<ProjectCreditBalance>(`/api/v1/projects/${encodeURIComponent(id)}/credits`),
+      apiFetch<GenerationJobSummary[]>(`/api/v1/projects/${encodeURIComponent(id)}/generations`),
+    ]);
   }
-  const members = await apiFetch<ProjectMember[]>(`/api/v1/projects/${encodeURIComponent(id)}/members`);
-  const versions = await apiFetch<ContentVersion[]>(`/api/v1/projects/${encodeURIComponent(id)}/content-versions`);
-  const packs = await apiFetch<ContentPack[]>(`/api/v1/projects/${encodeURIComponent(id)}/content-packs`);
-  const credits = await apiFetch<ProjectCreditBalance>(`/api/v1/projects/${encodeURIComponent(id)}/credits`);
 
   return (
     <>
+      {!showcase ? <ProjectRealtimeRefresh projectId={project.id} /> : null}
       <Link className="back-link" href="/projects">← Projects</Link>
       <section className="project-hero">
         <div>
@@ -45,7 +68,19 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </div>
           <p className="credit-cost">Each generation reserves {credits.generationCost} credits.</p>
           {project.currentUserRole === "OWNER" || project.currentUserRole === "EDITOR" ? (
-            <GenerateContentForm projectId={project.id} />
+            <GenerateContentForm
+              projectId={project.id}
+              showcase={showcase}
+              brief={brief}
+              /*
+                Only the project that has a compiled replay gets a destination.
+                This used to be one shared constant, so submitting from any
+                project landed in the first project's generation.
+              */
+              replayHref={
+                showcase && project.id === SHOWCASE_PROJECT_ID ? SHOWCASE_JOB_HREF : undefined
+              }
+            />
           ) : (
             <p>Owner or editor access is required to generate content.</p>
           )}
@@ -63,6 +98,38 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </ul>
         </article>
       </section>
+      {/*
+        The way back into a finished generation. A job id otherwise exists only
+        in the URL the generate flow redirects to, so closing that page used to
+        lose the result — including the asset grid on its detail page — even
+        though the job itself was perfectly intact.
+      */}
+      <section className="version-history">
+        <div className="version-history__heading">
+          <div><p className="eyebrow">Generation history</p><h2>Recent generations</h2></div>
+          <span>{generations.length} job{generations.length === 1 ? "" : "s"}</span>
+        </div>
+        {generations.length === 0 ? (
+          <div className="empty-state"><h2>No generations yet</h2><p>Start a draft above and it will appear here.</p></div>
+        ) : (
+          <ul className="generation-list">
+            {generations.map((job) => (
+              <li key={job.id}>
+                <Link href={`/projects/${encodeURIComponent(project.id)}/generations/${encodeURIComponent(job.id)}`}>
+                  <span className={`status status--${job.status.toLowerCase().replaceAll("_", "-")}`}>
+                    {job.status}
+                  </span>
+                  <strong>{job.contentVersionTitle ?? "Draft in progress"}</strong>
+                  {/* A fixed format, not a locale one, so the server's output
+                      is the same wherever it renders. */}
+                  <small>{job.createdAt.slice(0, 16).replace("T", " ")}</small>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <section className="version-history">
         <div className="version-history__heading">
           <div><p className="eyebrow">Content workflow</p><h2>Version history</h2></div>
@@ -72,15 +139,23 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <div className="empty-state"><h2>No content versions yet</h2><p>Generate a draft to begin the review workflow.</p></div>
         ) : (
           <div className="version-list">
-            {versions.map((version) => <ContentVersionReview key={version.id} projectId={project.id} version={version} />)}
+            {versions.map((version) => (
+              <ContentVersionReview
+                key={version.id}
+                playHref={showcase && project.id === SHOWCASE_PROJECT_ID ? "/demo" : undefined}
+                projectId={project.id}
+                version={version}
+              />
+            ))}
           </div>
         )}
       </section>
       <ContentPackManager
         approvedVersions={versions.filter((version) => version.status === "APPROVED")}
-        canManage={project.currentUserRole === "OWNER" || project.currentUserRole === "EDITOR"}
+        canManage={!showcase && (project.currentUserRole === "OWNER" || project.currentUserRole === "EDITOR")}
         packs={packs}
         projectId={project.id}
+        realtimeEnabled={!showcase}
       />
     </>
   );

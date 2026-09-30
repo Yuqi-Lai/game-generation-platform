@@ -10,10 +10,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class GenerationLifecycleService {
 	private final GenerationJobRepository jobs;
 	private final CreditService credits;
+	private final GenerationService generationService;
 
-	public GenerationLifecycleService(GenerationJobRepository jobs, CreditService credits) {
+	public GenerationLifecycleService(GenerationJobRepository jobs, CreditService credits,
+			GenerationService generationService) {
 		this.jobs = jobs;
 		this.credits = credits;
+		this.generationService = generationService;
 	}
 
 	@Transactional
@@ -24,6 +27,7 @@ public class GenerationLifecycleService {
 		if (job.getActiveAttempt() != null) job.getActiveAttempt().timeOut();
 		job.timeOut();
 		credits.release(job);
+		generationService.notifyJob(job);
 	}
 
 	@Transactional
@@ -34,5 +38,6 @@ public class GenerationLifecycleService {
 		if (job.getActiveAttempt() != null) job.getActiveAttempt().cancel();
 		job.cancel();
 		credits.release(job);
+		generationService.notifyJob(job);
 	}
 }

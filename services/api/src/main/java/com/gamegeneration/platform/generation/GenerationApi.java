@@ -39,6 +39,18 @@ public final class GenerationApi {
 		}
 	}
 
+	/**
+	 * A job as it appears in a project's history list.
+	 *
+	 * Deliberately not {@link GenerationJobResponse}: that carries the full
+	 * content version, and assembling it queries the asset table once per job,
+	 * so listing a project would fan out. The list only has to identify a job
+	 * and link to it, and the detail endpoint already serves the rest.
+	 */
+	public record GenerationJobSummaryResponse(UUID id, String status, String failureCode,
+			Instant createdAt, Instant completedAt, int attemptNumber,
+			UUID contentVersionId, String contentVersionTitle) {}
+
 	public record GenerationJobResponse(UUID id, UUID projectId, String prompt, String status,
 			String failureCode, String failureMessage, Instant createdAt, Instant updatedAt,
 			Instant completedAt, int attemptNumber, boolean canCancel, boolean canRetry,

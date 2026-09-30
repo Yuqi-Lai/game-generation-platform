@@ -12,12 +12,16 @@ import com.gamegeneration.platform.outbox.OutboxEventRepository;
 import com.gamegeneration.platform.project.ProjectRepository;
 import com.gamegeneration.platform.project.ProjectRole;
 import com.gamegeneration.platform.project.ProjectStatus;
+import com.gamegeneration.platform.realtime.RealtimeEvent;
+import com.gamegeneration.platform.realtime.RealtimeEventTypes;
+import com.gamegeneration.platform.realtime.RealtimeNotifier;
 import com.gamegeneration.platform.shared.ConflictException;
 import com.gamegeneration.platform.shared.ForbiddenException;
 import com.gamegeneration.platform.shared.NotFoundException;
 import com.gamegeneration.platform.user.AppUser;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,11 +39,13 @@ public class ContentPackService {
 	private final OutboxEventRepository outbox;
 	private final ContentPackProperties properties;
 	private final ObjectMapper objectMapper;
+	private final RealtimeNotifier realtime;
 
 	public ContentPackService(ProjectRepository projects, ProjectMembershipRepository memberships,
 			ContentPackRepository packs, ContentPackItemRepository items, ExportJobRepository exportJobs,
 			ContentVersionRepository versions, ContentAssetRepository assets,
-			OutboxEventRepository outbox, ContentPackProperties properties, ObjectMapper objectMapper) {
+			OutboxEventRepository outbox, ContentPackProperties properties, ObjectMapper objectMapper,
+			RealtimeNotifier realtime) {
 		this.projects = projects;
 		this.memberships = memberships;
 		this.packs = packs;
@@ -50,6 +56,7 @@ public class ContentPackService {
 		this.outbox = outbox;
 		this.properties = properties;
 		this.objectMapper = objectMapper;
+		this.realtime = realtime;
 	}
 
 	@Transactional
@@ -57,7 +64,9 @@ public class ContentPackService {
 		var membership = requireEditor(actor, projectId);
 		var project = projects.findForUpdate(projectId).orElseThrow(() -> new NotFoundException("Project not found"));
 		if (project.getStatus() != ProjectStatus.ACTIVE) throw new ConflictException("Archived projects cannot create packs");
-		return response(packs.save(new ContentPack(project, request.name().trim(), actor)), membership);
+		var pack = packs.save(new ContentPack(project, request.name().trim(), actor));
+		notifyPack(pack, "created");
+		return response(pack, membership);
 	}
 
 	@Transactional(readOnly = true)
@@ -96,6 +105,7 @@ public class ContentPackService {
 				.toList();
 		items.save(new ContentPackItem(pack, version, CONTENT_TYPE, version.getStructuredContent(),
 				objectMapper.writeValueAsString(assetSnapshots), actor));
+		notifyPack(pack, "item-added");
 		return response(pack, membership);
 	}
 
@@ -106,6 +116,7 @@ public class ContentPackService {
 		var pack = requirePackForUpdate(projectId, packId);
 		requireDraft(pack);
 		items.findByContentPackIdAndContentVersionId(packId, versionId).ifPresent(items::delete);
+		notifyPack(pack, "item-removed");
 		return response(pack, membership);
 	}
 
@@ -118,6 +129,7 @@ public class ContentPackService {
 		requireDraft(pack);
 		if (items.countByContentPackId(packId) == 0) throw new ConflictException("A pack must contain at least one version");
 		pack.ready();
+		notifyPack(pack, "ready");
 		return response(pack, membership);
 	}
 
@@ -144,7 +156,15 @@ public class ContentPackService {
 		outbox.save(new OutboxEvent(eventId, "ContentPack", packId, ContentPackEvents.REQUESTED,
 				properties.requestTopic(), packId.toString(), objectMapper.writeValueAsString(event)));
 		pack.startExport();
+		notifyPack(pack, "export-started");
 		return response(pack, membership);
+	}
+
+	void notifyPack(ContentPack pack, String change) {
+		realtime.afterCommit(RealtimeEvent.now(RealtimeEventTypes.CONTENT_PACK_UPDATED,
+				pack.getProject().getId(), pack.getId(), Map.of(
+						"status", pack.getStatus().name(),
+						"change", change)));
 	}
 
 	ContentPackApi.PackResponse response(ContentPack pack, ProjectMembership membership) {

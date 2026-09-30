@@ -2,6 +2,10 @@ package com.gamegeneration.platform.pack;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import com.gamegeneration.platform.realtime.RealtimeEvent;
+import com.gamegeneration.platform.realtime.RealtimeEventTypes;
+import com.gamegeneration.platform.realtime.RealtimeNotifier;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,14 +17,17 @@ public class ContentPackExportResultProcessor {
 	private final ExportJobRepository jobs;
 	private final ExportInboxEventRepository inbox;
 	private final ContentPackProperties properties;
+	private final RealtimeNotifier realtime;
 
 	public ContentPackExportResultProcessor(ObjectMapper objectMapper, ContentPackRepository packs,
-			ExportJobRepository jobs, ExportInboxEventRepository inbox, ContentPackProperties properties) {
+			ExportJobRepository jobs, ExportInboxEventRepository inbox, ContentPackProperties properties,
+			RealtimeNotifier realtime) {
 		this.objectMapper = objectMapper;
 		this.packs = packs;
 		this.jobs = jobs;
 		this.inbox = inbox;
 		this.properties = properties;
+		this.realtime = realtime;
 	}
 
 	@Transactional
@@ -49,6 +56,7 @@ public class ContentPackExportResultProcessor {
 		if (context == null || terminal(eventId, event.eventType(), context)) return;
 		context.job().start(event.workerExecutionId());
 		record(eventId, event.eventType(), context.job().getId(), "ACCEPTED", null);
+		notifyPack(context, "export-running");
 	}
 
 	private void succeeded(UUID eventId, ContentPackEvents.Succeeded event) {
@@ -60,12 +68,14 @@ public class ContentPackExportResultProcessor {
 					"Worker returned an unexpected artifact location");
 			context.pack().fail();
 			record(eventId, event.eventType(), context.job().getId(), "REJECTED", "Unexpected artifact location");
+			notifyPack(context, "export-failed");
 			return;
 		}
 		context.job().succeed(event.workerExecutionId(), event.artifactBucket(), event.artifactKey(),
 				event.contentType(), event.sizeBytes(), event.sha256());
 		context.pack().exported();
 		record(eventId, event.eventType(), context.job().getId(), "ACCEPTED", null);
+		notifyPack(context, "export-succeeded");
 	}
 
 	private void failed(UUID eventId, ContentPackEvents.Failed event) {
@@ -74,6 +84,7 @@ public class ContentPackExportResultProcessor {
 		context.job().fail(event.workerExecutionId(), event.failureCode(), event.failureMessage());
 		context.pack().fail();
 		record(eventId, event.eventType(), context.job().getId(), "ACCEPTED", null);
+		notifyPack(context, "export-failed");
 	}
 
 	private ExportContext context(UUID eventId, String eventType, UUID jobId, UUID packId, UUID executionKey) {
@@ -99,6 +110,13 @@ public class ContentPackExportResultProcessor {
 
 	private void record(UUID eventId, String eventType, UUID jobId, String disposition, String detail) {
 		inbox.save(new ExportInboxEvent(eventId, eventType, jobId, disposition, detail));
+	}
+	private void notifyPack(ExportContext context, String change) {
+		realtime.afterCommit(RealtimeEvent.now(RealtimeEventTypes.CONTENT_PACK_UPDATED,
+				context.pack().getProject().getId(), context.pack().getId(), Map.of(
+						"status", context.pack().getStatus().name(),
+						"exportStatus", context.job().getStatus().name(),
+						"change", change)));
 	}
 	private record ExportContext(ContentPack pack, ExportJob job) {}
 }
