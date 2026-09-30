@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { ProjectCard } from "@/components/project-card";
 import { apiFetch } from "@/lib/api";
+import { isPublicPortfolioMode } from "@/lib/deployment-mode";
+import { listShowcaseProjects } from "@/lib/showcase-data";
 import type { Project } from "@/lib/types";
 
 export default async function ProjectsPage() {
-  const projects = await apiFetch<Project[]>("/api/v1/projects");
+  const projects = isPublicPortfolioMode()
+    ? listShowcaseProjects()
+    : await apiFetch<Project[]>("/api/v1/projects");
 
   return (
     <>

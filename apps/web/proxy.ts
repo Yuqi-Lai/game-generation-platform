@@ -1,7 +1,18 @@
-import { auth0 } from "./lib/auth0";
+import { NextResponse } from "next/server";
+import { isPublicPortfolioMode } from "./lib/deployment-mode";
 
 export async function proxy(request: Request) {
-  return auth0.middleware(request);
+  if (isPublicPortfolioMode()) {
+    const url = new URL(request.url);
+    if (
+      url.pathname.startsWith("/api/projects") ||
+      url.pathname.startsWith("/auth")
+    ) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+    return NextResponse.next();
+  }
+  return (await import("./lib/auth0")).auth0.middleware(request);
 }
 
 export const config = {

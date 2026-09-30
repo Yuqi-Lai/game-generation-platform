@@ -1,0 +1,476 @@
+{
+  "projects": [
+    {
+      "id": "molly-barnaby",
+      "name": "A tiny chibi witch name Molly helps Barnaby, an elderly s…",
+      "description": "A tiny chibi witch name Molly helps Barnaby, an elderly seagull scholar wearing tiny spectacles and a sailor cap, retrieve lost sea route memories by brewing a Potion of Golden Sight. Map: Compact, readable seaside farm under gentle dawn light. Features a timber cottage and windmill workshop, tidy crop plots, a central sandy path, wooden pier and turquoise tide pools.",
+      "status": "ACTIVE",
+      "currentUserRole": "OWNER",
+      "createdAt": "2026-09-18T14:20:00Z",
+      "updatedAt": "2026-09-30T15:42:00Z",
+      "archivedAt": null,
+      "version": 4
+    },
+    {
+      "id": "rainy-cyberpunk-city",
+      "name": "A rainy cyberpunk city avenue at midnight with glowing ho…",
+      "description": "A rainy cyberpunk city avenue at midnight with glowing holographic billboards, towering neon skyscrapers, wet asphalt streets reflecting pink and cyan light, an arcade hall entrance, and a ramen stall on the corner. A modern young courier explores the empty street.",
+      "status": "ACTIVE",
+      "currentUserRole": "OWNER",
+      "createdAt": "2026-09-11T21:10:00Z",
+      "updatedAt": "2026-09-27T03:18:00Z",
+      "archivedAt": null,
+      "version": 3
+    },
+    {
+      "id": "crossing-inn",
+      "name": "THE ONE-ARMED HUNTER - CROSSING INN",
+      "description": "A stormy tavern encounter where an old one-armed hunter warns of an abyssal beast rising through the town's aqueduct.",
+      "status": "ACTIVE",
+      "currentUserRole": "EDITOR",
+      "createdAt": "2026-08-29T12:00:00Z",
+      "updatedAt": "2026-09-22T17:06:00Z",
+      "archivedAt": null,
+      "version": 2
+    }
+  ],
+  "details": {
+    "molly-barnaby": {
+      "members": [
+        {
+          "userId": "showcase-owner",
+          "email": "creator@example.test",
+          "displayName": "Portfolio Creator",
+          "role": "OWNER",
+          "joinedAt": "2026-09-18T14:20:00Z"
+        },
+        {
+          "userId": "showcase-reviewer",
+          "email": "reviewer@example.test",
+          "displayName": "World Reviewer",
+          "role": "REVIEWER",
+          "joinedAt": "2026-09-19T10:00:00Z"
+        }
+      ],
+      "credits": {
+        "projectId": "molly-barnaby",
+        "totalGranted": 120,
+        "reserved": 0,
+        "consumed": 30,
+        "available": 90,
+        "generationCost": 10,
+        "updatedAt": "2026-09-30T15:42:00Z"
+      },
+      "generations": [
+        {
+          "id": "molly-barnaby-showcase",
+          "status": "SUCCEEDED",
+          "failureCode": null,
+          "createdAt": "2026-09-30T15:34:00Z",
+          "completedAt": "2026-09-30T15:42:00Z",
+          "attemptNumber": 1,
+          "contentVersionId": "molly-version-2",
+          "contentVersionTitle": "The Potion of Golden Sight"
+        },
+        {
+          "id": "molly-coastal-draft",
+          "status": "SUCCEEDED",
+          "failureCode": null,
+          "createdAt": "2026-09-25T18:10:00Z",
+          "completedAt": "2026-09-25T18:17:00Z",
+          "attemptNumber": 1,
+          "contentVersionId": "molly-version-1",
+          "contentVersionTitle": "Coastal Workshop — First Draft"
+        }
+      ],
+      "versions": [
+        {
+          "id": "molly-version-2",
+          "projectId": "molly-barnaby",
+          "versionNumber": 2,
+          "status": "DRAFT",
+          "title": "The Potion of Golden Sight",
+          "content": {
+            "version": "playable-game-content/v1",
+            "synopsis": "Molly follows Barnaby's clues through a compact coastal farm and windmill workshop.",
+            "scenes": [
+              {
+                "id": "scene-coastal-farm"
+              }
+            ]
+          },
+          "assets": [],
+          "createdAt": "2026-09-30T15:42:00Z",
+          "updatedAt": "2026-09-30T15:42:00Z",
+          "reviewRequest": null,
+          "canSubmitForReview": false,
+          "canDecide": false,
+          "demoBundle": true
+        },
+        {
+          "id": "molly-version-1",
+          "projectId": "molly-barnaby",
+          "versionNumber": 1,
+          "status": "APPROVED",
+          "title": "Coastal Workshop — First Draft",
+          "content": {
+            "version": "playable-game-content/v1",
+            "synopsis": "The approved first pass of Molly and Barnaby's seaside quest.",
+            "scenes": [
+              {
+                "id": "scene-coastal-farm"
+              }
+            ]
+          },
+          "assets": [],
+          "createdAt": "2026-09-25T18:17:00Z",
+          "updatedAt": "2026-09-26T10:12:00Z",
+          "reviewRequest": {
+            "id": "molly-review-1",
+            "contentVersionId": "molly-version-1",
+            "requestNumber": 1,
+            "status": "APPROVED",
+            "requestedById": "showcase-owner",
+            "createdAt": "2026-09-25T19:00:00Z",
+            "decidedAt": "2026-09-26T10:12:00Z",
+            "reviewers": [
+              {
+                "reviewerId": "showcase-reviewer",
+                "reviewerName": "World Reviewer",
+                "reviewerEmail": "reviewer@example.test",
+                "decision": {
+                  "id": "molly-decision-1",
+                  "reviewerId": "showcase-reviewer",
+                  "reviewerName": "World Reviewer",
+                  "reviewerEmail": "reviewer@example.test",
+                  "decision": "APPROVE",
+                  "comment": "The coastal route is clear, readable and ready to play.",
+                  "createdAt": "2026-09-26T10:12:00Z",
+                  "decidedAt": "2026-09-26T10:12:00Z"
+                }
+              }
+            ]
+          },
+          "canSubmitForReview": false,
+          "canDecide": false,
+          "demoBundle": true
+        }
+      ],
+      "packs": [
+        {
+          "id": "molly-pack-1",
+          "projectId": "molly-barnaby",
+          "name": "Coastal Showcase Pack",
+          "status": "EXPORTED",
+          "items": [
+            {
+              "id": "molly-pack-item-1",
+              "contentVersionId": "molly-version-1",
+              "versionNumber": 1,
+              "title": "Coastal Workshop — First Draft",
+              "contentType": "playable-game-content/v1",
+              "content": {
+                "version": "playable-game-content/v1"
+              },
+              "assets": [],
+              "addedAt": "2026-09-27T12:00:00Z"
+            }
+          ],
+          "exportJob": {
+            "id": "molly-export-1",
+            "status": "SUCCEEDED",
+            "artifactBucket": "portfolio-showcase",
+            "artifactKey": "showcase/molly/coastal-showcase-pack.zip",
+            "artifactUri": null,
+            "contentType": "application/zip",
+            "sizeBytes": 1843200,
+            "sha256": "8a4e96d9ab770cd0b0ab7accc8c6352af94155cfef28a7bdcb79a61604785845",
+            "failureCode": null,
+            "failureMessage": null,
+            "createdAt": "2026-09-27T12:01:00Z",
+            "startedAt": "2026-09-27T12:01:02Z",
+            "completedAt": "2026-09-27T12:01:11Z"
+          },
+          "canEdit": false,
+          "canExport": false,
+          "createdAt": "2026-09-27T12:00:00Z",
+          "updatedAt": "2026-09-27T12:01:11Z"
+        }
+      ],
+      "generationBrief": "A tiny chibi witch name Molly helps Barnaby, an elderly seagull scholar wearing tiny spectacles and a sailor cap, retrieve lost sea route memories by brewing a Potion of Golden Sight."
+    },
+    "rainy-cyberpunk-city": {
+      "members": [
+        {
+          "userId": "showcase-owner",
+          "email": "creator@example.test",
+          "displayName": "Portfolio Creator",
+          "role": "OWNER",
+          "joinedAt": "2026-09-11T21:10:00Z"
+        },
+        {
+          "userId": "showcase-editor",
+          "email": "artist@example.test",
+          "displayName": "Environment Artist",
+          "role": "EDITOR",
+          "joinedAt": "2026-09-12T13:00:00Z"
+        }
+      ],
+      "credits": {
+        "projectId": "rainy-cyberpunk-city",
+        "totalGranted": 100,
+        "reserved": 0,
+        "consumed": 20,
+        "available": 80,
+        "generationCost": 10,
+        "updatedAt": "2026-09-27T03:18:00Z"
+      },
+      "generations": [
+        {
+          "id": "cyberpunk-generation-2",
+          "status": "SUCCEEDED",
+          "failureCode": null,
+          "createdAt": "2026-09-27T03:09:00Z",
+          "completedAt": "2026-09-27T03:18:00Z",
+          "attemptNumber": 1,
+          "contentVersionId": "cyberpunk-version-2",
+          "contentVersionTitle": "Neon Sector After Midnight"
+        },
+        {
+          "id": "cyberpunk-generation-1",
+          "status": "SUCCEEDED",
+          "failureCode": null,
+          "createdAt": "2026-09-12T18:00:00Z",
+          "completedAt": "2026-09-12T18:08:00Z",
+          "attemptNumber": 1,
+          "contentVersionId": "cyberpunk-version-1",
+          "contentVersionTitle": "Lower Tier Prototype"
+        }
+      ],
+      "versions": [
+        {
+          "id": "cyberpunk-version-2",
+          "projectId": "rainy-cyberpunk-city",
+          "versionNumber": 2,
+          "status": "IN_REVIEW",
+          "title": "Neon Sector After Midnight",
+          "content": {
+            "version": "showcase-metadata/v1",
+            "synopsis": "A rain-soaked courier route through the lower neon sector."
+          },
+          "assets": [],
+          "createdAt": "2026-09-27T03:18:00Z",
+          "updatedAt": "2026-09-27T03:18:00Z",
+          "reviewRequest": {
+            "id": "cyberpunk-review-2",
+            "contentVersionId": "cyberpunk-version-2",
+            "requestNumber": 1,
+            "status": "OPEN",
+            "requestedById": "showcase-owner",
+            "createdAt": "2026-09-27T04:00:00Z",
+            "decidedAt": null,
+            "reviewers": [
+              {
+                "reviewerId": "showcase-reviewer",
+                "reviewerName": "World Reviewer",
+                "reviewerEmail": "reviewer@example.test",
+                "decision": null
+              }
+            ]
+          },
+          "canSubmitForReview": false,
+          "canDecide": false
+        },
+        {
+          "id": "cyberpunk-version-1",
+          "projectId": "rainy-cyberpunk-city",
+          "versionNumber": 1,
+          "status": "CHANGES_REQUESTED",
+          "title": "Lower Tier Prototype",
+          "content": {
+            "version": "showcase-metadata/v1",
+            "synopsis": "The first pass through the market roofs and service corridors."
+          },
+          "assets": [],
+          "createdAt": "2026-09-12T18:08:00Z",
+          "updatedAt": "2026-09-13T09:40:00Z",
+          "reviewRequest": {
+            "id": "cyberpunk-review-1",
+            "contentVersionId": "cyberpunk-version-1",
+            "requestNumber": 1,
+            "status": "CHANGES_REQUESTED",
+            "requestedById": "showcase-owner",
+            "createdAt": "2026-09-12T19:00:00Z",
+            "decidedAt": "2026-09-13T09:40:00Z",
+            "reviewers": [
+              {
+                "reviewerId": "showcase-reviewer",
+                "reviewerName": "World Reviewer",
+                "reviewerEmail": "reviewer@example.test",
+                "decision": {
+                  "id": "cyberpunk-decision-1",
+                  "reviewerId": "showcase-reviewer",
+                  "reviewerName": "World Reviewer",
+                  "reviewerEmail": "reviewer@example.test",
+                  "decision": "REQUEST_CHANGES",
+                  "comment": "Raise the landmark contrast around the market entrance.",
+                  "createdAt": "2026-09-13T09:40:00Z",
+                  "decidedAt": "2026-09-13T09:40:00Z"
+                }
+              }
+            ]
+          },
+          "canSubmitForReview": false,
+          "canDecide": false
+        }
+      ],
+      "packs": [],
+      "generationBrief": "A rainy cyberpunk city avenue at midnight with glowing holographic billboards, towering neon skyscrapers, wet asphalt streets reflecting pink and cyan light, an arcade hall entrance, and a ramen stall on the corner. A modern young courier explores the empty street."
+    },
+    "crossing-inn": {
+      "members": [
+        {
+          "userId": "showcase-owner",
+          "email": "creator@example.test",
+          "displayName": "Portfolio Creator",
+          "role": "OWNER",
+          "joinedAt": "2026-08-29T12:00:00Z"
+        },
+        {
+          "userId": "showcase-editor",
+          "email": "designer@example.test",
+          "displayName": "Game Designer",
+          "role": "EDITOR",
+          "joinedAt": "2026-08-30T09:00:00Z"
+        },
+        {
+          "userId": "showcase-viewer",
+          "email": "viewer@example.test",
+          "displayName": "Portfolio Viewer",
+          "role": "VIEWER",
+          "joinedAt": "2026-09-01T09:00:00Z"
+        }
+      ],
+      "credits": {
+        "projectId": "crossing-inn",
+        "totalGranted": 200,
+        "reserved": 0,
+        "consumed": 100,
+        "available": 100,
+        "generationCost": 10,
+        "updatedAt": "2026-09-29T14:57:08Z"
+      },
+      "generations": [
+        {
+          "id": "crossing-generation-10",
+          "status": "SUCCEEDED",
+          "failureCode": null,
+          "createdAt": "2026-09-29T14:57:08Z",
+          "completedAt": "2026-09-29T15:05:00Z",
+          "attemptNumber": 1,
+          "contentVersionId": "crossing-version-10",
+          "contentVersionTitle": "The Hearthfire Warning"
+        },
+        {
+          "id": "crossing-generation-9",
+          "status": "SUCCEEDED",
+          "failureCode": null,
+          "createdAt": "2026-09-29T14:44:49Z",
+          "completedAt": "2026-09-29T14:52:00Z",
+          "attemptNumber": 1,
+          "contentVersionId": "crossing-version-9",
+          "contentVersionTitle": "Beneath the Floorboards"
+        }
+      ],
+      "versions": [
+        {
+          "id": "crossing-version-10",
+          "projectId": "crossing-inn",
+          "versionNumber": 10,
+          "status": "DRAFT",
+          "title": "The Hearthfire Warning",
+          "content": {
+            "version": "showcase-metadata/v1",
+            "synopsis": "A stormy tavern scene: the one-armed hunter lays the abyssal scale on the counter."
+          },
+          "assets": [],
+          "createdAt": "2026-09-29T15:05:00Z",
+          "updatedAt": "2026-09-29T15:05:00Z",
+          "reviewRequest": null,
+          "canSubmitForReview": false,
+          "canDecide": false
+        },
+        {
+          "id": "crossing-version-9",
+          "projectId": "crossing-inn",
+          "versionNumber": 9,
+          "status": "APPROVED",
+          "title": "Beneath the Floorboards",
+          "content": {
+            "version": "showcase-metadata/v1",
+            "synopsis": "An earlier approved take on the scraping sound rising from the drainage channels."
+          },
+          "assets": [],
+          "createdAt": "2026-09-29T14:52:00Z",
+          "updatedAt": "2026-09-29T14:55:00Z",
+          "reviewRequest": {
+            "id": "crossing-review-9",
+            "contentVersionId": "crossing-version-9",
+            "requestNumber": 1,
+            "status": "APPROVED",
+            "requestedById": "showcase-owner",
+            "createdAt": "2026-09-29T14:53:00Z",
+            "decidedAt": "2026-09-29T14:55:00Z",
+            "reviewers": [
+              {
+                "reviewerId": "showcase-reviewer",
+                "reviewerName": "World Reviewer",
+                "reviewerEmail": "reviewer@example.test",
+                "decision": {
+                  "id": "crossing-decision-9",
+                  "reviewerId": "showcase-reviewer",
+                  "reviewerName": "World Reviewer",
+                  "reviewerEmail": "reviewer@example.test",
+                  "decision": "APPROVE",
+                  "comment": "The storm lighting and tavern interior are presentation-ready.",
+                  "createdAt": "2026-09-29T14:55:00Z",
+                  "decidedAt": "2026-09-29T14:55:00Z"
+                }
+              }
+            ]
+          },
+          "canSubmitForReview": false,
+          "canDecide": false
+        }
+      ],
+      "packs": [
+        {
+          "id": "crossing-pack-1",
+          "projectId": "crossing-inn",
+          "name": "Crossing Inn Candidate",
+          "status": "READY",
+          "items": [
+            {
+              "id": "crossing-item-1",
+              "contentVersionId": "crossing-version-9",
+              "versionNumber": 9,
+              "title": "Beneath the Floorboards",
+              "contentType": "showcase-metadata/v1",
+              "content": {
+                "version": "showcase-metadata/v1"
+              },
+              "assets": [],
+              "addedAt": "2026-09-29T15:10:00Z"
+            }
+          ],
+          "exportJob": null,
+          "canEdit": false,
+          "canExport": false,
+          "createdAt": "2026-09-29T15:10:00Z",
+          "updatedAt": "2026-09-29T15:10:00Z"
+        }
+      ],
+      "generationBrief": "On a stormy night, a one-armed veteran hunter pushes open the heavy oak door of the Crossing Inn. The hearthfire illuminates a rune-wrapped greatsword at his waist, instantly silencing the boisterous tavern. He sits at the counter and slams a faintly pulsing abyssal dragon scale in front of the innkeeper. 'The beast that devoured the vanguard at Blackridge three years ago has awakened,' the old hunter rasps. 'It is swimming toward the town along the underground aqueduct.' Before his words fade, a deep, ominous scraping sound echoes from the dark drainage channels beneath the floorboards."
+    }
+  }
+}

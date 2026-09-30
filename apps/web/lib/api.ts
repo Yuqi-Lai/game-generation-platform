@@ -1,6 +1,7 @@
 import "server-only";
 
 import { auth0 } from "@/lib/auth0";
+import { isPublicPortfolioMode } from "@/lib/deployment-mode";
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
@@ -9,6 +10,9 @@ export class ApiError extends Error {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  if (isPublicPortfolioMode()) {
+    throw new Error("Backend API access is disabled in public portfolio mode.");
+  }
   const audience = process.env.AUTH0_AUDIENCE;
   const accessToken = await auth0.getAccessToken(audience ? { audience } : undefined);
   const baseUrl = process.env.API_BASE_URL;
