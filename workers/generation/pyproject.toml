@@ -23,6 +23,9 @@ generation-worker = "generation_worker.main:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# So `pytest` works without an editable install. The dependencies still have to
+# be present, but the import path should not be a separate setup step.
+pythonpath = ["src"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
