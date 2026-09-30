@@ -30,3 +30,11 @@ target/
 coverage/
 test-results/
 playwright-report/
+
+# Large media. Deployed straight to the host from the working tree, so the
+# bytes never enter git history — a 36 MB binary there is permanent.
+apps/web/public/videos/*.mp4
+
+# Python virtual environments
+.venv/
+venv/

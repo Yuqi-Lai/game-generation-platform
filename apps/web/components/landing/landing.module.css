@@ -1,0 +1,1196 @@
+/* ==========================================================================
+   Public landing experience
+   Obsidian dark editorial × cyber-fantasy × 2D game craft.
+
+   Two rules this file lives by:
+   1. The generated game world is the protagonist. Type frames it; it never
+      competes with it.
+   2. Nothing is positioned absolutely to create the layout. Every section is
+      an ordinary grid in normal flow, so content cannot collide.
+   ========================================================================== */
+
+.page {
+  /* Obsidian. Locked, not derived. */
+  --ground: #090a0f;
+  --ground-lift: #0e1016;
+  --panel: #12141c;
+
+  --line: #23262f;
+  --line-soft: #191c24;
+
+  /*
+    Warm soft off-white, not paper white — #ffffff against near-black is glaring
+    at display sizes. Measured on #090a0f:
+
+      --chalk      #f2ede4   16.96:1
+      --chalk-dim  #b9b5ae    9.68:1
+      --stone      #8b8d92    5.95:1
+      --stone-dim  #747780    4.42:1   small labels only
+  */
+  --chalk: #f2ede4;
+  --chalk-dim: #b9b5ae;
+  --stone: #8b8d92;
+  --stone-dim: #747780;
+
+  --ember: #e4633a;
+
+  /*
+    Neon accents, shared by the hero's video control and the step cards in
+    section 02. Defined here because those live in different subtrees — one
+    definition, several consumers, no drift.
+  */
+  --hud-chassis: #0b0e15;
+  --hud-seam: #1b2432;
+  --hud-screen: #05070d;
+  --hud-grid: #132033;
+  --hud-neon: #37e0ff;
+  --hud-text: #cfe6f5;
+  --hud-dim: #5d7191;
+
+  /* Re-pointed per world by the showcase to tint the ambient bloom. */
+  --bloom: #455236;
+  --bloom-alt: #e0a53f;
+
+  --gutter: clamp(1.25rem, 4.5vw, 5.5rem);
+
+  /* next/font publishes --font-sans / --font-pixel on <html>. */
+  --type-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --type-pixel: var(--font-pixel), ui-monospace, "SFMono-Regular", monospace;
+
+  background-color: var(--ground, #090a0f);
+  color: var(--chalk, #f2ede4);
+  color-scheme: dark;
+  font-family: var(--type-sans);
+  font-synthesis-weight: none;
+  min-height: 100svh;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+
+  /*
+    No `overflow` here. ScrollTrigger and `position: sticky` both break under a
+    clipping ancestor. Sections that overhang clip themselves.
+  */
+}
+
+/* globals.css sets a serif face on bare h1/h2. `:where` carries no specificity,
+   so this resets the family without competing with the type classes below. */
+.page :where(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--type-sans);
+}
+
+/* ----------------------------------------------------------------- content */
+
+/*
+  The ground, the texture and the type all live on one element.
+
+  This page rendered white-on-white repeatedly because the background sat on
+  `.page` while the text sat on `.shell`, with separate full-viewport layers
+  between them — any one of those covering the ground gave light-on-light,
+  since the text painted above them all.
+
+  So the atmosphere is back, but never as a sibling that can get in between:
+    - grain and the pixel lattice are `background-image` layers on this element,
+      which paint above its background-color and below its content, always;
+    - the ambient light and the stars are `::before`/`::after` at `z-index: -1`.
+      `.shell` is `position: relative; z-index: 1`, so it forms a stacking
+      context and -1 is contained within it: above the background, below every
+      piece of content. Worst case a layer misrenders and the background looks
+      wrong — the type stays readable either way.
+*/
+.shell {
+  background-color: #090a0f;
+  background-image:
+    /* Pixel lattice — subliminal, reads as precision rather than decoration. */
+    repeating-linear-gradient(to right, rgb(242 237 228 / 2.4%) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(to bottom, rgb(242 237 228 / 2.4%) 0 1px, transparent 1px 56px),
+    /* Fine film grain. */
+    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+  background-size: auto, auto, 160px 160px;
+  min-height: 100svh;
+  position: relative;
+  z-index: 1;
+}
+
+/* Ambient light and stars. Both contained by .shell's stacking context. */
+.shell::before,
+.shell::after {
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: -1;
+}
+
+/*
+  Diffused ambient light — washed graphite pooling at the corners, so the black
+  has depth and is never a flat fill. Plus the denser, dimmer star layer.
+*/
+.shell::before {
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgb(242 237 228 / 85%) 50%, transparent 51%),
+    radial-gradient(1px 1px at 34% 7%, rgb(242 237 228 / 70%) 50%, transparent 51%),
+    radial-gradient(1px 1px at 58% 22%, rgb(242 237 228 / 80%) 50%, transparent 51%),
+    radial-gradient(1px 1px at 79% 11%, rgb(242 237 228 / 65%) 50%, transparent 51%),
+    radial-gradient(1px 1px at 91% 31%, rgb(242 237 228 / 75%) 50%, transparent 51%),
+    radial-gradient(1px 1px at 7% 44%, rgb(242 237 228 / 70%) 50%, transparent 51%),
+    radial-gradient(1px 1px at 27% 57%, rgb(242 237 228 / 80%) 50%, transparent 51%),
+    radial-gradient(1px 1px at 46% 71%, rgb(242 237 228 / 65%) 50%, transparent 51%),
+    radial-gradient(1px 1px at 66% 49%, rgb(242 237 228 / 75%) 50%, transparent 51%),
+    radial-gradient(1px 1px at 84% 63%, rgb(242 237 228 / 70%) 50%, transparent 51%),
+    radial-gradient(1px 1px at 19% 86%, rgb(242 237 228 / 80%) 50%, transparent 51%),
+    radial-gradient(1px 1px at 53% 93%, rgb(242 237 228 / 65%) 50%, transparent 51%),
+    radial-gradient(1px 1px at 73% 81%, rgb(242 237 228 / 75%) 50%, transparent 51%),
+    radial-gradient(60% 46% at 14% 8%, rgb(58 70 96 / 26%), transparent 72%),
+    radial-gradient(54% 42% at 88% 74%, rgb(84 60 78 / 20%), transparent 74%),
+    radial-gradient(72% 52% at 50% 106%, rgb(44 56 88 / 24%), transparent 76%);
+  background-repeat: repeat, repeat, repeat, repeat, repeat, repeat, repeat,
+    repeat, repeat, repeat, repeat, repeat, repeat, no-repeat, no-repeat, no-repeat;
+  background-size: 640px 640px, 640px 640px, 640px 640px, 640px 640px, 640px 640px,
+    640px 640px, 640px 640px, 640px 640px, 640px 640px, 640px 640px, 640px 640px,
+    640px 640px, 640px 640px, cover, cover, cover;
+}
+
+/* The brighter, sparser stars that carry the glint. */
+.shell::after {
+  background-image:
+    radial-gradient(1.7px 1.7px at 23% 14%, rgb(226 233 255 / 95%) 50%, transparent 51%),
+    radial-gradient(1.7px 1.7px at 62% 33%, rgb(242 237 228 / 90%) 50%, transparent 51%),
+    radial-gradient(1.7px 1.7px at 88% 19%, rgb(226 233 255 / 85%) 50%, transparent 51%),
+    radial-gradient(1.7px 1.7px at 15% 61%, rgb(242 237 228 / 90%) 50%, transparent 51%),
+    radial-gradient(1.7px 1.7px at 44% 78%, rgb(226 233 255 / 95%) 50%, transparent 51%),
+    radial-gradient(1.7px 1.7px at 77% 67%, rgb(242 237 228 / 85%) 50%, transparent 51%),
+    radial-gradient(1.7px 1.7px at 36% 41%, rgb(226 233 255 / 90%) 50%, transparent 51%);
+  background-size: 900px 900px;
+}
+
+/*
+  Slow on purpose. Two layers on long, unequal, out-of-phase periods: different
+  stars are bright at different moments, which reads as a sky rather than as the
+  whole field pulsing. Only opacity animates, so it stays on the compositor.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  .shell::before { animation: driftFar 19s ease-in-out infinite; }
+  .shell::after { animation: driftNear 13s ease-in-out 4s infinite; }
+}
+
+@keyframes driftFar {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.78; }
+}
+@keyframes driftNear {
+  0%, 100% { opacity: 0.42; }
+  50% { opacity: 0.85; }
+}
+
+/* ------------------------------------------------------- route transition */
+
+/* Opacity only, and via CSS rather than an animation library — transform,
+   filter and will-change on an ancestor each create a containing block for
+   fixed-position descendants, which breaks sticky and scroll-driven layout. */
+.transitionHost {
+  transition: opacity 0.5s cubic-bezier(0.72, 0, 0.24, 1);
+}
+.transitionHost[data-leaving="true"] {
+  opacity: 0;
+}
+
+/* ----------------------------------------------------------------- cursor */
+
+.cursorHidden,
+.cursorHidden * {
+  cursor: none !important;
+}
+
+.cursorLayer {
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: 90;
+}
+
+.cursorDot,
+.cursorRing {
+  left: 0;
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  will-change: transform;
+}
+
+/*
+  A bare light dot vanishes against bright game footage, and a bare dark one
+  vanishes against the ground. So: light core, dark ring, plus a faint glow —
+  legible on anything without being loud.
+*/
+.cursorDot {
+  background-color: #ffffff;
+  block-size: 7px;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1.5px rgb(9 10 15 / 85%),
+    0 0 10px 2px rgb(9 10 15 / 55%);
+  inline-size: 7px;
+  transition: opacity 0.25s ease, scale 0.3s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+.cursorDot[data-state="link"],
+.cursorDot[data-state="play"],
+.cursorDot[data-state="drag"] { scale: 0; }
+
+.cursorRing {
+  align-items: center;
+  block-size: 32px;
+  border: 1.5px solid #ffffff;
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 1px rgb(9 10 15 / 70%),
+    0 0 0 3px rgb(9 10 15 / 28%) inset;
+  display: flex;
+  inline-size: 30px;
+  justify-content: center;
+  transition:
+    opacity 0.25s ease,
+    inline-size 0.42s cubic-bezier(0.2, 0.9, 0.2, 1),
+    block-size 0.42s cubic-bezier(0.2, 0.9, 0.2, 1),
+    background-color 0.42s ease,
+    border-color 0.42s ease;
+}
+.cursorRing[data-state="link"] {
+  background-color: rgb(242 237 228 / 16%);
+  block-size: 48px;
+  border-color: #ffffff;
+  inline-size: 48px;
+}
+.cursorRing[data-state="play"],
+.cursorRing[data-state="drag"] {
+  background-color: var(--ember, #e4633a);
+  block-size: 64px;
+  border-color: transparent;
+  inline-size: 64px;
+}
+
+.cursorLabel {
+  color: #090a0f;
+  font-family: var(--type-pixel);
+  font-size: 0.5rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------ typographic */
+
+.reveal { opacity: 0; }
+
+/* ---- animated title ---- */
+
+.animatedTitle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+}
+
+.animatedLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.28em;
+}
+
+/*
+  Each word starts swung away from the reader on its own axis. The perspective
+  lives here rather than on the parent so words rotate independently.
+*/
+.animatedWord {
+  opacity: 0;
+  transform: translate3d(0, 44px, -60px) rotateY(48deg) rotateX(-32deg);
+  transform-origin: 50% 50% -150px;
+  will-change: opacity, transform;
+}
+
+.display {
+  /* Soft bloom, so the headline reads as lit rather than printed. Wide and
+     low-alpha — a tight bright shadow smears the letterforms. */
+  text-shadow:
+    0 0 34px rgb(214 226 255 / 13%),
+    0 0 84px rgb(150 180 255 / 8%);
+  font-size: clamp(2.6rem, 6.6vw, 7rem);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 0.9;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.displayLarge {
+  font-size: clamp(2.2rem, 5.6vw, 5rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 0.94;
+  margin: 0;
+}
+
+/* Small game-flavoured labels. The pixel face lives only at this size. */
+.meta {
+  color: var(--stone);
+  font-family: var(--type-pixel);
+  font-size: 0.5625rem;
+  letter-spacing: 0.2em;
+  line-height: 1.6;
+  margin: 0;
+  text-transform: uppercase;
+}
+.metaBright { color: var(--chalk-dim); }
+.metaEmber { color: var(--ember); }
+
+.lede {
+  color: var(--chalk-dim);
+  font-size: clamp(1rem, 1.3vw, 1.2rem);
+  line-height: 1.6;
+  margin: 0;
+  max-width: 38ch;
+}
+
+.sectionIntro {
+  display: grid;
+  gap: clamp(0.85rem, 1.6vw, 1.35rem);
+}
+
+.section {
+  padding-inline: var(--gutter);
+  position: relative;
+}
+
+/* ----------------------------------------------------------------- buttons */
+
+.cta,
+.ctaGhost {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 600;
+  gap: 0.7rem;
+  min-height: 56px;
+  padding-inline: 1.75rem;
+  position: relative;
+  transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+  /* Even line lengths on the narrow viewports where it does wrap. */
+  white-space: nowrap;
+}
+
+/* Primary: ember, with a soft bloom so it reads as lit rather than filled. */
+.cta {
+  background-color: var(--ember, #e4633a);
+  box-shadow: 0 0 0 0 rgb(228 99 58 / 40%), 0 14px 40px -14px rgb(228 99 58 / 70%);
+  color: #0b0b0d;
+}
+.cta:hover {
+  background-color: #f0724a;
+  box-shadow: 0 0 0 6px rgb(228 99 58 / 14%), 0 18px 50px -14px rgb(228 99 58 / 85%);
+}
+
+.ctaGhost {
+  background-color: rgb(242 237 228 / 7%);
+  border: 1px solid rgb(242 237 228 / 30%);
+  color: var(--chalk, #f2ede4);
+}
+.ctaGhost:hover {
+  background-color: rgb(242 237 228 / 14%);
+  border-color: rgb(242 237 228 / 58%);
+}
+
+.ctaArrow {
+  display: inline-block;
+  font-family: var(--type-pixel);
+  font-size: 0.625rem;
+  transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+.cta:hover .ctaArrow,
+.ctaGhost:hover .ctaArrow { transform: translateX(4px); }
+
+.ctaRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+
+.page :is(a, button):focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--ember);
+  outline-offset: 4px;
+}
+
+.skipLink {
+  background-color: #f2ede4;
+  color: #090a0f;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  left: 1rem;
+  padding: 0.75rem 1.1rem;
+  position: fixed;
+  top: -6rem;
+  transition: top 0.2s ease;
+  z-index: 100;
+}
+.skipLink:focus { top: 1rem; }
+
+/* ======================================================================== */
+/* NAV                                                                       */
+/* ======================================================================== */
+
+.nav {
+  align-items: center;
+  background-color: #090a0f;
+  display: flex;
+  gap: 2rem;
+  justify-content: space-between;
+  left: 0;
+  padding: 1.5rem var(--gutter);
+  position: fixed;
+  right: 0;
+  top: 0;
+  transition: background-color 0.5s ease, backdrop-filter 0.5s ease;
+  z-index: 40;
+}
+.nav[data-lifted="true"] {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.brand {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.7rem;
+}
+.brandMark {
+  align-items: center;
+  background-color: var(--ember, #e4633a);
+  color: #090a0f;
+  display: inline-flex;
+  font-family: var(--type-pixel);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  height: 24px;
+  justify-content: center;
+  line-height: 1;
+  width: 24px;
+}
+.brandName {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+@media (min-width: 640px) {
+  .brandName { font-size: 0.9375rem; }
+}
+
+.navMeta {
+  color: var(--stone-dim);
+  display: none;
+  font-family: var(--type-pixel);
+  font-size: 0.5rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+@media (min-width: 1100px) { .navMeta { display: block; } }
+
+.navActions {
+  align-items: center;
+  display: flex;
+  gap: 1.25rem;
+}
+/* Optional links give up their space to the wordmark on narrow screens. */
+.navLink {
+  color: var(--chalk-dim);
+  display: none;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+@media (min-width: 860px) {
+  .navLink { display: inline; }
+}
+.navLink:hover { color: var(--chalk); }
+.navActions .ctaGhost { min-height: 44px; padding-inline: 1.15rem; }
+
+/* ======================================================================== */
+/* THE GAME WINDOW — video, treated as pixel art                             */
+/* ======================================================================== */
+
+/*
+  Footage fills the 16:9 frame with `object-fit: cover`. The demo capture is
+  1920x1074 (~1.788) against a 1.778 frame, so cover crops well under a percent.
+
+  Deliberately NOT `image-rendering: pixelated`. That is the right call when
+  upscaling a small buffer — see `.worldCanvas` — but this is a 1920px source
+  *downscaled* into a ~780px frame, where nearest-neighbour point-samples and
+  shimmers on every movement. Smooth filtering is what makes a pixel-art
+  capture read cleanly at a smaller size.
+*/
+.gameVideo {
+  background-color: #000;
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+/*
+  The procedural fallback scene. This one *is* nearest-neighbour: it upscales a
+  208x117 buffer, where `pixelated` is what keeps the pixels square.
+*/
+.worldCanvas {
+  display: block;
+  height: 100%;
+  image-rendering: pixelated;
+  width: 100%;
+}
+
+/*
+  Video surface plus its control, styled as the section 02 cabinet: dark
+  chassis, 2px seam, neon cyan, bitmap type, square corners, stepped
+  transitions. Same language, so the page has one retro vocabulary.
+*/
+.videoShell {
+  block-size: 100%;
+  inline-size: 100%;
+  position: relative;
+}
+
+/* Click the picture to toggle. Sits under the control, above the video. */
+.videoHit {
+  cursor: pointer;
+  inset: 0;
+  position: absolute;
+  z-index: 3;
+}
+
+.videoToggle {
+  align-items: center;
+  background-color: rgb(11 14 21 / 88%);
+  border: 2px solid var(--hud-seam);
+  color: var(--hud-text);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--type-pixel);
+  font-size: 0.5rem;
+  gap: 0.45rem;
+  inset-block-end: 0.85rem;
+  inset-inline-end: 0.85rem;
+  letter-spacing: 0.16em;
+  padding: 0.45rem 0.6rem;
+  position: absolute;
+  text-transform: uppercase;
+  transition:
+    background-color 0.2s steps(1, end),
+    border-color 0.2s steps(1, end),
+    color 0.2s steps(1, end);
+  z-index: 4;
+}
+.videoToggle:hover,
+.videoToggle:focus-visible {
+  background-color: var(--hud-neon);
+  border-color: var(--hud-neon);
+  box-shadow: 0 0 18px -4px var(--hud-neon);
+  color: #04222c;
+}
+.videoToggle:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 3px;
+}
+
+.videoToggleGlyph {
+  font-size: 0.5625rem;
+  line-height: 1;
+}
+
+/*
+  A corner vignette over the footage. There were scanlines here too, a
+  1px-in-3px dark line, and on a large display they read as horizontal
+  banding across the flat areas of the art underneath. No opacity was low
+  enough to fix that: the artefact is the regular period, not the darkness.
+  Removed from the demo cabinet for the same reason.
+*/
+.frameScan {
+  background-image:
+    radial-gradient(120% 120% at 50% 50%, transparent 56%, rgb(0 0 0 / 50%) 100%);
+  inset: 0;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+/* ======================================================================== */
+/* 00 — HERO                                                                 */
+/* ======================================================================== */
+
+.hero {
+  align-content: center;
+  display: grid;
+  gap: clamp(2.25rem, 4vw, 3.5rem);
+  min-height: 100svh;
+  overflow-x: clip;
+  padding-block: clamp(7rem, 15vh, 10rem) clamp(3rem, 7vh, 5rem);
+}
+
+@media (min-width: 1024px) {
+  .hero {
+    /* Type takes five columns. The world takes seven, and wins the screen. */
+    align-items: center;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: clamp(2.5rem, 4vw, 4.5rem);
+  }
+}
+
+.heroType {
+  display: grid;
+  gap: clamp(1.4rem, 2.4vw, 2rem);
+}
+
+.heroEyebrow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.25rem;
+}
+.heroEyebrow > span:first-child::before {
+  background-color: var(--ember);
+  content: "";
+  display: inline-block;
+  height: 4px;
+  margin-right: 0.6rem;
+  vertical-align: 2px;
+  width: 4px;
+}
+
+.heroStage {
+  /* Overhangs the gutter on desktop so the world bleeds off the page edge. */
+  position: relative;
+}
+@media (min-width: 1024px) {
+  .heroStage { margin-right: calc(var(--gutter) * -0.7); }
+}
+
+/*
+  The window whose clip-path morphs on scroll. Stepped chamfers, never a smooth
+  diagonal — a 45-degree cut is the one shape pixel art cannot make, so the
+  staircase is the point.
+*/
+.heroFrame {
+  aspect-ratio: 16 / 9;
+  background-color: #000;
+  clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.heroFrameMeta {
+  display: flex;
+  gap: 1rem;
+  inset-block-start: 0;
+  inset-inline: 0;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  position: absolute;
+  z-index: 3;
+}
+
+.heroStageCaption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  justify-content: space-between;
+  padding-top: 1rem;
+}
+
+/* ======================================================================== */
+/* 02 — THE LOOP: five open step cards                                      */
+/* ======================================================================== */
+
+.workflow {
+  display: grid;
+  gap: clamp(2.5rem, 5vw, 4rem);
+  padding-block: clamp(5rem, 13vh, 10rem);
+}
+
+/*
+  No chassis, no label bar, no screen. The cards sit directly on the page
+  ground; an outer container sealed the pipeline off from the page and, at a
+  narrower max-width, crushed every card into a tall thin strip.
+
+  Wider than the page's other blocks so five cards still have room to read.
+*/
+.pipeline {
+  --stage-gap: clamp(1rem, 2.4vw, 2.25rem);
+
+  display: grid;
+  gap: var(--stage-gap);
+  grid-template-columns: 1fr;
+  list-style: none;
+  margin: 0 auto;
+  max-width: 1360px;
+  padding: 0;
+  width: 100%;
+}
+@media (min-width: 900px) {
+  .pipeline {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* ---- step card ---- */
+
+/*
+  A faint translucent surface and a hairline edge — enough to read as a card
+  against the ground without becoming a box. Generous padding so the copy has
+  somewhere to breathe.
+*/
+.stage {
+  background-color: rgb(20 23 32 / 55%);
+  border: 1px solid rgb(242 237 228 / 9%);
+  display: grid;
+  gap: 0.75rem;
+  padding: clamp(1.15rem, 1.9vw, 1.65rem);
+  position: relative;
+  transition: background-color 0.2s steps(1, end), border-color 0.2s steps(1, end);
+}
+.stage:hover {
+  background-color: rgb(24 28 39 / 70%);
+  border-color: rgb(55 224 255 / 34%);
+}
+
+/*
+  The flow between steps: a dashed run across the gap with an arrow on it.
+  Pointing right between columns, and down once the cards stack.
+*/
+.stage[data-flows="true"]::before,
+.stage[data-flows="true"]::after {
+  content: "";
+  position: absolute;
+}
+
+.stage[data-flows="true"]::before {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgb(242 237 228 / 22%) 0 3px,
+    transparent 3px 7px
+  );
+  inset-block-end: calc(var(--stage-gap) * -1);
+  inset-inline-start: 50%;
+  height: var(--stage-gap);
+  transform: translateX(-50%);
+  width: 1px;
+}
+.stage[data-flows="true"]::after {
+  color: var(--hud-neon);
+  content: "↓";
+  font-size: 0.6875rem;
+  inset-block-end: calc(var(--stage-gap) * -0.5);
+  inset-inline-start: 50%;
+  line-height: 1;
+  opacity: 0.8;
+  transform: translate(-50%, 50%);
+}
+
+@media (min-width: 900px) {
+  .stage[data-flows="true"]::before {
+    background-image: repeating-linear-gradient(
+      to right,
+      rgb(242 237 228 / 22%) 0 3px,
+      transparent 3px 7px
+    );
+    height: 1px;
+    inset-block-end: auto;
+    inset-block-start: 50%;
+    inset-inline-end: calc(var(--stage-gap) * -1);
+    inset-inline-start: auto;
+    transform: translateY(-50%);
+    width: var(--stage-gap);
+  }
+  .stage[data-flows="true"]::after {
+    content: "→";
+    inset-block-end: auto;
+    inset-block-start: 50%;
+    inset-inline-end: calc(var(--stage-gap) * -0.5);
+    inset-inline-start: auto;
+    transform: translate(50%, -50%);
+  }
+}
+
+/* Cards arrive along the line in order. */
+@media (prefers-reduced-motion: no-preference) {
+  .pipeline[data-arrived="false"] .stage {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  .pipeline[data-arrived="true"] .stage {
+    animation: stageArrive 0.28s steps(3, end) backwards;
+    animation-delay: calc(var(--node-index) * 0.08s);
+  }
+}
+@keyframes stageArrive {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.stageHead {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+}
+
+.stageBadge {
+  color: var(--ember);
+  font-family: var(--type-pixel);
+  font-size: 0.625rem;
+  letter-spacing: 0.16em;
+}
+
+/* Pixel diamond, lit. */
+.stageMarker {
+  background-color: var(--hud-neon);
+  block-size: 7px;
+  box-shadow: 0 0 10px -1px var(--hud-neon);
+  inline-size: 7px;
+  rotate: 45deg;
+}
+
+.stageName {
+  color: var(--chalk);
+  font-family: var(--type-pixel);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  line-height: 1.45;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+/* Description copy stays in the sans face — a bitmap font at this length is a
+   readability tax the retro framing does not need. */
+.stageBody {
+  color: var(--chalk-dim);
+  font-size: 0.875rem;
+  line-height: 1.62;
+  margin: 0;
+}
+
+.stageReward {
+  border-top: 1px dashed rgb(242 237 228 / 12%);
+  color: var(--stone-dim);
+  font-family: var(--type-pixel);
+  font-size: 0.4375rem;
+  letter-spacing: 0.14em;
+  margin: 0;
+  padding-top: 0.7rem;
+  text-transform: uppercase;
+}
+
+/* ======================================================================== */
+/* 03 — GENERATE: one prompt box over a living pixel skyline                 */
+/* ======================================================================== */
+
+.generate {
+  align-content: center;
+  display: grid;
+  min-height: 100svh;
+  overflow: hidden;
+  padding-block: clamp(5rem, 12vh, 9rem);
+  position: relative;
+}
+
+/*
+  The skyline. Absolute inside the section (never fixed, never a sibling of the
+  page ground), with the content stacked above it — so the backdrop cannot end
+  up in front of the type.
+*/
+.generateBackdrop {
+  inset: 0;
+  position: absolute;
+  z-index: 0;
+}
+.generateBackdrop canvas {
+  height: 100%;
+  width: 100%;
+}
+
+/* Scrim, so the type always has something dark under it whatever the skyline
+   is doing at that moment. */
+.generateScrim {
+  background:
+    linear-gradient(to bottom, #090a0f 0%, rgb(9 10 15 / 58%) 24%, rgb(9 10 15 / 72%) 60%, #090a0f 100%),
+    radial-gradient(64% 52% at 50% 52%, rgb(9 10 15 / 86%) 0%, transparent 78%);
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+
+/*
+  Wider than the prompt box, because the title is now the widest element here.
+  The prompt keeps its own max-width below, so only the title uses the extra.
+*/
+.generateInner {
+  display: grid;
+  gap: clamp(1.5rem, 3vw, 2.25rem);
+  justify-items: center;
+  margin-inline: auto;
+  max-width: 1000px;
+  position: relative;
+  text-align: center;
+  width: 100%;
+  z-index: 2;
+}
+
+/* ---- section title ---- */
+
+/*
+  The wordmark now runs in the body sans at the hero's own display scale, so
+  section 03's title reads as a sibling of section 01's rather than as a
+  separate pixel logo. `--font-display` is gone with it: nothing referenced it
+  any more, so the face is no longer downloaded.
+
+  Measured, Inter 500: "BUILD YOUR GAME" is 8.91em wide and the caps are
+  0.728em. That is over three times the width of the eight-glyph pixel
+  wordmark it replaces, which is why `white-space: nowrap` had to go — at the
+  hero clamp the line needs 298px inside 280px on a 320px viewport. It holds
+  one line everywhere above roughly 340px and wraps below that, which is what
+  the hero title does too.
+
+  The fill and the glow are unchanged from the monochrome silver treatment.
+  Note that section 01's title carries no gradient at all, so this is "the
+  same face and scale", not a pixel-for-pixel match.
+*/
+.logoTitle {
+  background-clip: text;
+  /*
+    Monochrome silver: pure white down to a low-saturation blue-grey. No hue
+    beyond the faint cool cast in the base, which is the whole point — the
+    wordmark reads as a engineering tool rather than a neon sign.
+
+    Pure white at the top is deliberate, asked for directly. It is the harshest
+    stop available at 19.78:1 on this ground; the ramp drops away from it fast
+    so only the very top edge carries that brightness.
+  */
+  background-image: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    #f8fafc 22%,
+    #e2e8f0 52%,
+    #cbd5e1 78%,
+    #94a3b8 100%
+  );
+  /* Mid-ramp silver, so an engine without `background-clip: text` still shows
+     readable letters rather than nothing at all. */
+  color: #cbd5e1;
+  /*
+    One hard sink shadow, then one cyan bloom. `filter` rather than
+    `text-shadow` because drop-shadow works on the rendered alpha, so it
+    follows the clipped gradient rather than painting through it.
+
+    The sink is a fixed 2px, which is the agreed weight. It does not scale with
+    the clamp, so the relief reads stronger at the small end than the large —
+    an `em` offset held it even, but the brief asked for 1-2px.
+  */
+  filter:
+    drop-shadow(0 2px 0 #04070d)
+    drop-shadow(0 0 12px rgb(255 255 255 / 20%));
+  font-family: var(--type-sans);
+  /*
+    The hero's scale, weight and tracking, so the two titles match. `.page`
+    sets `font-synthesis-weight: none`, so 500 has to be a real Inter weight —
+    it is, the face is loaded with 400-800.
+  */
+  font-size: clamp(2.2rem, 5.6vw, 5rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 0.94;
+  /* Adds to `.generateInner`'s row gap, so only the space below the crest
+     grows — the label above it keeps its original distance. */
+  margin: 0 0 clamp(0.75rem, 2vw, 1.75rem);
+  /* Even line lengths on the narrow viewports where it does wrap. */
+  text-wrap: balance;
+  /* This face's space is already a narrow 0.4em, so no pull is needed —
+     the -0.25em the previous face wanted would nearly collide the words. */
+  word-spacing: 0;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .logoTitle {
+    background-image: none;
+    -webkit-text-fill-color: currentcolor;
+  }
+}
+
+/* A quiet stepped settle. No blur, so the pixel edges stay hard. */
+@media (prefers-reduced-motion: no-preference) {
+  .logoTitle[data-arrived="false"] { opacity: 0; transform: scale(0.97); }
+  .logoTitle[data-arrived="true"] { animation: logoPop 0.34s steps(4, end) backwards; }
+}
+@keyframes logoPop {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+
+/* ---- prompt box ---- */
+
+.promptBox {
+  backdrop-filter: blur(10px);
+  /* Unchanged by the wider container above. */
+  margin-inline: auto;
+  max-width: 780px;
+  background-color: rgb(14 16 22 / 82%);
+  border: 1px solid var(--line);
+  /* Stepped chamfer, same pixel language as the game windows. */
+  clip-path: polygon(
+    0% 4%, 4% 4%, 4% 0%, 96% 0%, 96% 4%, 100% 4%,
+    100% 96%, 96% 96%, 96% 100%, 4% 100%, 4% 96%, 0% 96%
+  );
+  display: grid;
+  gap: 0.85rem;
+  padding: clamp(1.25rem, 2.6vw, 1.85rem);
+  text-align: left;
+  width: 100%;
+}
+
+.promptLabel {
+  color: var(--stone);
+  font-family: var(--type-pixel);
+  font-size: 0.5625rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+/*
+  The body sans for the field itself. The label above it stays on the bitmap
+  face, and that contrast is deliberate: the label is chrome, the field is
+  content — and a whole world description gets typed in here, which is prose
+  rather than a caption.
+
+  Measured against the bitmap face it replaces: Inter's x-height is 0.546em to
+  Silkscreen's 0.500em, but a line of it is only 0.69x as wide at the same
+  size. So the swap alone reads lighter, and the size comes down a step on top
+  of that — 13px of Inter sits just under the 15px of Silkscreen it replaces.
+  The leading closes from 2 to 1.8 and the tracking from 0.06em to 0.01em; both
+  were devices for keeping blocky uniform-width glyphs legible, and on a
+  proportional face they just look spaced out.
+*/
+.promptInput {
+  background: transparent;
+  border: 0;
+  /* A coloured block caret, for the terminal read. */
+  caret-color: var(--ember);
+  color: var(--chalk);
+  font-family: var(--type-sans);
+  font-size: clamp(0.75rem, 0.95vw, 0.8125rem);
+  letter-spacing: 0.01em;
+  line-height: 1.8;
+  outline: 0;
+  padding: 0;
+  resize: none;
+  width: 100%;
+}
+
+/*
+  Set explicitly rather than left to inherit: `::placeholder` does inherit the
+  font in current browsers, but stating it keeps the two in step if the field's
+  own face is ever changed.
+*/
+.promptInput::placeholder {
+  color: var(--stone-dim);
+  font-family: var(--type-sans);
+  font-size: clamp(0.75rem, 0.95vw, 0.8125rem);
+  letter-spacing: 0.01em;
+  line-height: 1.8;
+}
+
+.promptInputSeed {
+  color: rgb(148 163 184 / 62%);
+  transition: color 180ms ease;
+}
+
+.promptInputSeed:focus {
+  color: var(--chalk);
+}
+
+/*
+  Touch devices opt out of the smaller size. iOS Safari zooms the whole page
+  when a focused input computes under 16px, which throws the layout around on
+  tap — and this is the page's primary input. Anywhere there is a real pointer
+  the design keeps its smaller field.
+*/
+@media (pointer: coarse) {
+  .promptInput,
+  .promptInput::placeholder {
+    font-size: 1rem;
+  }
+}
+
+.promptError {
+  color: #ff8a6a;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: 0;
+}
+.promptErrorLink {
+  border-bottom: 1px solid currentColor;
+  color: var(--chalk);
+  white-space: nowrap;
+}
+
+.publicReplay {
+  max-width: 1000px;
+  text-align: left;
+  width: 100%;
+}
+
+.promptInput:disabled {
+  opacity: 0.55;
+}
+
+.cta:disabled,
+.ctaGhost:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.promptFoot {
+  align-items: center;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-top: 1rem;
+}
+
+.footer {
+  align-items: center;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  justify-content: space-between;
+  padding-block: 1.75rem 2.25rem;
+  padding-inline: var(--gutter);
+  position: relative;
+  z-index: 2;
+}
+
+/* ======================================================================== */
+/* REDUCED MOTION                                                            */
+/* ======================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .page *,
+  .page *::before,
+  .page *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .reveal { opacity: 1 !important; }
+  .animatedWord { opacity: 1 !important; transform: none !important; }
+}

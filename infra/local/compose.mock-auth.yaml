@@ -1,0 +1,31 @@
+# Local mock auth — overlay for infra/local/compose.yaml.
+#
+# Switches the API's JwtDecoder from "fetch Auth0's JWKS" to "verify HS256 with
+# a shared secret", which is the affordance SecurityConfig already provides via
+# app.load-test.auth-enabled. The web app mints matching tokens when MOCK_AUTH
+# is set — see apps/web/lib/auth0.ts.
+#
+# The three values below must agree with apps/web/.env.local:
+#   LOAD_TEST_AUTH_SECRET  <-> MOCK_AUTH_SECRET
+#   AUTH0_ISSUER_URI       <-> MOCK_AUTH_ISSUER
+#   BOOTSTRAP_INVITED_EMAILS must contain MOCK_AUTH_EMAIL, because
+#   AuthenticatedUserService requires a pending invitation on first access.
+#
+# Usage, from the repository root:
+#   docker compose -p forge \
+#     -f infra/local/compose.yaml \
+#     -f infra/local/compose.mock-auth.yaml \
+#     up -d api
+#
+# To go back to real Auth0:
+#   docker compose -p forge -f infra/local/compose.yaml up -d api
+#
+# LOCAL ONLY. This accepts any HS256 token signed with a known secret.
+services:
+  api:
+    environment:
+      LOAD_TEST_AUTH_ENABLED: "true"
+      LOAD_TEST_AUTH_SECRET: local-mock-auth-secret-32-chars-min
+      AUTH0_ISSUER_URI: https://mock-auth.local/
+      AUTH0_AUDIENCE: https://api.game-generation.local
+      BOOTSTRAP_INVITED_EMAILS: dev@local.test
