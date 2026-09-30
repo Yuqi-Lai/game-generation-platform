@@ -300,11 +300,18 @@ def test_every_asset_prompt_uses_the_permanent_jrpg_base():
 
     assert output.content.style.art_direction == DEFAULT_ART_DIRECTION
     assert len(prompts) == 9
-    assert all(prompt.endswith(DEFAULT_SPRITE_BASE) for prompt, _ in prompts[:-1])
+    assert all(DEFAULT_SPRITE_BASE in prompt for prompt, _ in prompts[:-1])
+    assert all("FINAL DIRECTION OVERRIDE:" in prompts[index][0] for index in (1, 2, 3))
     assert prompts[-1][0].endswith(DEFAULT_SCENE_BASE + SCENE_RENDER_GUARD)
     assert all(GLOBAL_VISUAL_ANCHOR in prompt for prompt, _ in prompts)
+    assert "Canonical player:" not in prompts[-1][0]
+    assert "Render only the unoccupied environment" in prompts[-1][0]
+    assert "absolutely no player character" in prompts[-1][0]
     assert not any("watercolor" in prompt.lower() for prompt, _ in prompts)
     assert all("no second row, no stacked or partial duplicates" in prompt for prompt, _ in prompts[1:4])
+    assert "front view toward the viewer" in prompts[1][0]
+    assert "rear view away from the viewer" in prompts[2][0]
+    assert "strict right-facing side profile" in prompts[3][0]
     assert not any("witch" in prompt.lower() or "windmill" in prompt.lower() for prompt, _ in prompts)
     assert prompts[0][1] == "1:1"
     assert prompts[-1][1] == "16:9"

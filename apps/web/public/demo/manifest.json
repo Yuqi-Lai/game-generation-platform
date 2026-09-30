@@ -1,0 +1,269 @@
+{
+  "npcs": [
+    {
+      "id": "barnaby",
+      "name": "Barnaby",
+      "stats": {
+        "hp": 60,
+        "attack": 6,
+        "defense": 10
+      },
+      "assets": {
+        "avatar": "npc.barnaby.avatar",
+        "sprite": "npc.barnaby.sprite"
+      },
+      "description": "An elderly, genial seagull scholar standing upright on webbed feet, outfitted in a faded navy sailor cap, brass-rimmed miniature spectacles perched on his beak, and a weathered leather satchel bulging with rolled nautical chart remnants."
+    }
+  ],
+  "style": {
+    "palette": [
+      "#8fa998",
+      "#f4ecd8",
+      "#5b8a8c",
+      "#4a6d8c",
+      "#9b8cb8",
+      "#d4af37"
+    ],
+    "artDirection": "Classic 2D JRPG pixel art with a consistent palette and crisp square pixels",
+    "worldDescription": "A compact coastal homestead set at sunrise. In the upper-left sits a cozy single-story timber cottage adjoining an open-door windmill workshop housing an antique copper cauldron. Beside it, four neat farm plots display glowing sea herbs, ripe golden carrots, round pumpkins, and wild blossoms bordered by low split-rail fences and fruit trees. A broad sandy footpath cuts through the center toward a weathered plank pier at the water's edge. Along the lower and eastern margins, turquoise tide pools lap against low rugged cliffs where sea herbs glow faintly in the sea mist."
+  },
+  "title": "The Witch's Tide and Golden Sight",
+  "world": {
+    "width": 2560,
+    "height": 1440,
+    "tileSize": 64
+  },
+  "assets": [
+    {
+      "id": "player.stand",
+      "role": "PLAYER_STAND",
+      "width": 128,
+      "height": 128,
+      "sha256": "cdd31df7f280201ce03a91243af7ae1234b65d40ed2e025c327dd840fe820067",
+      "objectKey": "/demo/assets/player/stand.png",
+      "contentType": "image/png"
+    },
+    {
+      "id": "player.down",
+      "role": "PLAYER_DIRECTION",
+      "width": 384,
+      "height": 128,
+      "sha256": "089903c39c76ec60d76cae2a223fa7bdf8ce7b497263a0ffc16c4b23393eb3dd",
+      "objectKey": "/demo/assets/player/down.png",
+      "contentType": "image/png"
+    },
+    {
+      "id": "player.up",
+      "role": "PLAYER_DIRECTION",
+      "width": 384,
+      "height": 128,
+      "sha256": "62359cafe03d8c54d89f9c736eddc4a34ab0ea699b5c1944032fced28699c9fd",
+      "objectKey": "/demo/assets/player/up.png",
+      "contentType": "image/png"
+    },
+    {
+      "id": "player.right",
+      "role": "PLAYER_DIRECTION",
+      "width": 384,
+      "height": 128,
+      "sha256": "893226464a6d7869a63999cf9c6e374de300f937357fee0c4a87efa17b447b5a",
+      "objectKey": "/demo/assets/player/right.png",
+      "contentType": "image/png"
+    },
+    {
+      "id": "player.avatar",
+      "role": "PLAYER_AVATAR",
+      "width": 256,
+      "height": 256,
+      "sha256": "513a504a6fd47b484402562492a31f709649251eaa1cf07c8167b3a47d99381a",
+      "objectKey": "/demo/assets/player/avatar.png",
+      "contentType": "image/png"
+    },
+    {
+      "id": "npc.barnaby.sprite",
+      "role": "NPC_SPRITE",
+      "width": 128,
+      "height": 128,
+      "sha256": "3ff162fdbcd5fecf2876f80e31b1131521a5c9757ce5d2b205de239b62b3f6be",
+      "objectKey": "/demo/assets/npcs/barnaby/sprite.png",
+      "contentType": "image/png"
+    },
+    {
+      "id": "npc.barnaby.avatar",
+      "role": "NPC_AVATAR",
+      "width": 256,
+      "height": 256,
+      "sha256": "c9fee77d06680cae284d5c76c719b1684a54bad629cdc9ab6cca28e75fa9ed05",
+      "objectKey": "/demo/assets/npcs/barnaby/avatar.png",
+      "contentType": "image/png"
+    },
+    {
+      "id": "minion.tidepool-crab.sprite",
+      "role": "MINION_SPRITE",
+      "width": 128,
+      "height": 128,
+      "sha256": "d8d10d2b85628b73685a27e4034604a93eb8593d276a2cc7f0b9e6008eba60a2",
+      "objectKey": "/demo/assets/minions/tidepool-crab/sprite.png",
+      "contentType": "image/png"
+    },
+    {
+      "id": "minion.shell-crab.sprite",
+      "role": "MINION_SPRITE",
+      "width": 128,
+      "height": 128,
+      "sha256": "0d423d4eef3247c054e0e7c59ef71a23e8da134226168485fc278dc7df0bb9f0",
+      "objectKey": "/demo/assets/minions/shell-crab/sprite.png",
+      "contentType": "image/png"
+    },
+    {
+      "id": "scene.scene-coastal-farm.background",
+      "role": "SCENE_BACKGROUND",
+      "width": 2560,
+      "height": 1440,
+      "sha256": "e0246ad4fa111060d829acc14a95cbe91ec4a8fa9b7b824c0248b5b5b84a09be",
+      "objectKey": "/demo/assets/scenes/scene-coastal-farm/background.png",
+      "contentType": "image/png"
+    }
+  ],
+  "player": {
+    "id": "witch-molly",
+    "name": "Molly",
+    "stats": {
+      "hp": 100,
+      "attack": 16,
+      "defense": 8
+    },
+    "assets": {
+      "up": "player.up",
+      "down": "player.down",
+      "right": "player.right",
+      "stand": "player.stand",
+      "avatar": "player.avatar",
+      "frameCount": 3,
+      "frameWidth": 128,
+      "frameHeight": 128
+    },
+    "description": "A chibi yordle witch with 1.5-head-tall proportions, wearing an oversized floppy pale blush-pink pointed witch hat with a drooping curved tip. She has fluffy muted rose-mauve bangs, pointed furry elf ears poking outward, dot-matrix eyes, and no visible neck. Her outfit combines a soft lavender capelet, deep indigo inner dress, warm cream collar with subtle gold star trim, a worn leather satchel, a crooked dark-brown staff, and charcoal-purple shoes."
+  },
+  "scenes": [
+    {
+      "id": "scene-coastal-farm",
+      "exit": {
+        "x": 2048,
+        "y": 720
+      },
+      "title": "The Windmill Shore",
+      "npcIds": [
+        "barnaby"
+      ],
+      "dialogue": [
+        {
+          "text": "Squawk! Midnight's gale blew my heirloom navigation charts clear into the deep brine, little Molly!",
+          "speaker": "Barnaby"
+        },
+        {
+          "text": "Don't despair, Barnaby. The Potion of Golden Sight will reveal your lost channel in the mind's eye.",
+          "speaker": "Molly"
+        },
+        {
+          "text": "A scholar's blessing upon you! The copper cauldron waits swept and ready inside the windmill workshop.",
+          "speaker": "Barnaby"
+        },
+        {
+          "text": "You will find a sun-ripened Golden Carrot in your garden plot, and glowing sea herbs down by the cliff tide pools.",
+          "speaker": "Barnaby"
+        },
+        {
+          "text": "Mind the two pinch-happy crabs scuttling by the wet sand\u2014a tap from your crooked staff should keep them at bay!",
+          "speaker": "Barnaby"
+        },
+        {
+          "text": "I'll gather the carrot and herbs along the coastal path, brew the draught at the windmill, and return before dusk.",
+          "speaker": "Molly"
+        }
+      ],
+      "location": "Cottage farmstead and coastal bluffs overlooking the morning sea",
+      "minionIds": [
+        "tidepool-crab",
+        "shell-crab"
+      ],
+      "objective": "Speak with Barnaby at the pier and locate the ingredients for the Potion of Golden Sight across the farm and shoreline.",
+      "playerSpawn": {
+        "x": 512,
+        "y": 720
+      },
+      "backgroundAssetId": "scene.scene-coastal-farm.background",
+      "collisionRectangles": [
+        {
+          "x": 80,
+          "y": 80,
+          "width": 620,
+          "height": 440
+        },
+        {
+          "x": 760,
+          "y": 100,
+          "width": 480,
+          "height": 360
+        },
+        {
+          "x": 1820,
+          "y": 80,
+          "width": 660,
+          "height": 380
+        },
+        {
+          "x": 80,
+          "y": 1120,
+          "width": 820,
+          "height": 240
+        },
+        {
+          "x": 1720,
+          "y": 1060,
+          "width": 760,
+          "height": 300
+        },
+        {
+          "x": 1380,
+          "y": 840,
+          "width": 240,
+          "height": 320
+        }
+      ]
+    }
+  ],
+  "minions": [
+    {
+      "id": "tidepool-crab",
+      "name": "Tidepool Crab",
+      "stats": {
+        "hp": 24,
+        "attack": 4,
+        "defense": 2
+      },
+      "assets": {
+        "avatar": null,
+        "sprite": "minion.tidepool-crab.sprite"
+      },
+      "description": "A mischievous coastal crab with a muted coral-orange shell, two prominent snapping pincers, small beady eyes on stalks, and short scuttling legs in a compact animal silhouette."
+    },
+    {
+      "id": "shell-crab",
+      "name": "Shell Crab",
+      "stats": {
+        "hp": 24,
+        "attack": 4,
+        "defense": 2
+      },
+      "assets": {
+        "avatar": null,
+        "sprite": "minion.shell-crab.sprite"
+      },
+      "description": "A sturdy little shore crab with a dusty turquoise carapace, pair of front claws, beady stalk eyes, and a low scuttling posture along the sandy wet verge."
+    }
+  ],
+  "version": "playable-game-content/v1",
+  "assetBaseUrl": null,
+  "openingRemarks": "A cozy, compact 2D coastal exploration scene featuring apprentice witch Molly and the scholar seagull Barnaby, framed with classic pixel art aesthetics and gentle narrative environmental storytelling."
+}

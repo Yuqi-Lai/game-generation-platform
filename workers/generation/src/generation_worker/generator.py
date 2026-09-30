@@ -101,7 +101,12 @@ DEFAULT_SCENE_BASE = (
     "aesthetic, clean pixel textures, strictly 2D orthographic top-down flat grid projection, "
     "zero 3D perspective distortion, zero vanishing points, zero smooth gradients"
 )
-SCENE_RENDER_GUARD = ", tile alignment is invisible; no drawn grid lines, guide squares, or tile boundaries"
+SCENE_RENDER_GUARD = (
+    ", environment-only tilemap with open walkable space reserved for runtime actors; "
+    "absolutely no player character, NPC, person, creature, animal, face, character silhouette, "
+    "statue, mannequin, portrait, or character-shaped decoration anywhere in the image; "
+    "tile alignment is invisible; no drawn grid lines, guide squares, or tile boundaries"
+)
 
 
 @dataclass(frozen=True)
@@ -133,6 +138,7 @@ class GeminiGenerator:
         plan.style.art_direction = DEFAULT_ART_DIRECTION
         generated: list[GeneratedPlayableAsset] = []
         style = self._style_prompt(plan)
+        scene_style = self._scene_style_prompt(plan)
         player = plan.player
 
         stand = self._asset(
@@ -145,6 +151,11 @@ class GeminiGenerator:
             ))), 128, 128, True,
         )
         directions: dict[str, GeneratedPlayableAsset] = {}
+        screen_facing = {
+            "down": "front view toward the viewer (screen-down / south); face and chest visible",
+            "up": "rear view away from the viewer (screen-up / north); back visible, no face or eyes",
+            "right": "strict right-facing side profile (screen-right / east); nose, face, chest and toes point toward the RIGHT edge of the image, never toward the left edge or viewer",
+        }
         for direction in ("down", "up", "right"):
             directions[direction] = self._asset(
                 generated, output_prefix, f"player.{direction}", "PLAYER_DIRECTION",
@@ -152,10 +163,14 @@ class GeminiGenerator:
                 normalize_sprite_strip(self._generate_image(self._sprite_prompt(
                     style, "Create one and only one horizontal row of exactly three equally spaced "
                     f"whole-character animation frames, all facing {direction}: contact, passing, contact. "
+                    f"Required body orientation in every frame: {screen_facing[direction]}. "
                     "One character per frame, no second row, no stacked or partial duplicates. No text. "
                     f"Character: {player.name}. Canonical appearance: {player.description}. "
-                    "Preserve the reference character exactly. No scenery, floor, props, or drop shadow; "
-                    "every pixel outside the three silhouettes must be exactly #00FF00."),
+                    "Preserve the reference character identity, colors and outfit, but rotate the entire "
+                    "head and body to the required view; do not copy the reference's front-facing pose. "
+                    "No scenery, floor, props, or drop shadow; "
+                    "every pixel outside the three silhouettes must be exactly #00FF00.",
+                    facing=screen_facing[direction]),
                     [stand.body], aspect_ratio="16:9",
                 )), 384, 128, True,
             )
@@ -216,7 +231,7 @@ class GeminiGenerator:
                 generated, output_prefix, f"scene.{scene.id}.background", "SCENE_BACKGROUND",
                 f"scenes/{scene.id}/background.png",
                 normalize_background(self._generate_image(self._scene_prompt(
-                    style, f"Location: {scene.location}. Frame this as a compact small-town game map, "
+                    scene_style, f"Location: {scene.location}. Frame this as a compact small-town game map, "
                     "not a sweeping panorama. Keep any house, cliff, or large prop modest relative "
                     "to the player. Show continuous solid walkable ground "
                     "through the middle horizontal band from left-of-center to right-of-center; "
@@ -324,8 +339,27 @@ class GeminiGenerator:
         )
 
     @staticmethod
-    def _sprite_prompt(style: str, subject: str) -> str:
-        return f"{style}\n{subject.rstrip(' .')}{DEFAULT_SPRITE_BASE}"
+    def _scene_style_prompt(plan: GamePlan) -> str:
+        return (
+            f"{GLOBAL_VISUAL_ANCHOR} "
+            f"Shared game palette: {', '.join(plan.style.palette)}. "
+            f"World: {plan.style.world_description}. "
+            "Render only the unoccupied environment. Runtime characters will be composited separately."
+        )
+
+    @staticmethod
+    def _sprite_prompt(style: str, subject: str, *, facing: str | None = None) -> str:
+        prompt = f"{style}\n{subject.rstrip(' .')}{DEFAULT_SPRITE_BASE}"
+        if facing:
+            # The generic front/side decorator and front-facing reference must not
+            # override the required camera view of a directional animation.
+            prompt += (
+                f". FINAL DIRECTION OVERRIDE: {facing}. Apply this to ALL THREE frames, "
+                "including the head, torso, feet and held objects. Reference images define "
+                "identity only, not camera direction. Never turn the head back toward "
+                "the viewer; no front-facing three-quarter pose in a side or rear strip."
+            )
+        return prompt
 
     @staticmethod
     def _scene_prompt(style: str, setting: str) -> str:

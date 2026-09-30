@@ -958,7 +958,8 @@ function updateActorDepths() {
 }
 
 function playWalkAnim(scene, dir) {
-    const animKey = `walk-${dir}`;
+    // Left uses the right-facing strip mirrored, including its animation.
+    const animKey = `walk-${dir === 'left' ? 'right' : dir}`;
     const sheetKey = (dir === 'left') ? 'player_right_sheet' : `player_${dir}_sheet`;
 
     if (scene.textures.exists(sheetKey) && player.texture.key !== sheetKey) {
@@ -975,6 +976,8 @@ function playWalkAnim(scene, dir) {
         }
     }
 
+    // An earlier animation would otherwise overwrite this manually selected sheet.
+    player.anims.stop();
     const now = scene.time.now;
     if (playerAnimState.dir !== dir) {
         playerAnimState.dir = dir;

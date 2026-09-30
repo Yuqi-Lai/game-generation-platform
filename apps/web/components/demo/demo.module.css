@@ -1,0 +1,537 @@
+/* ==========================================================================
+   /demo — the public playable shell.
+
+   An arcade cabinet around a near-full-screen game surface: bezel, corner
+   brackets, CRT wash, and a splash card that holds the screen until someone
+   starts. Shares the landing page's ground, accent and pixel-label treatment,
+   but deliberately carries no nav, no sections and no dashboard chrome.
+   ========================================================================== */
+
+.demo {
+  --ground: #090a0f;
+  --line: #23262f;
+  --line-soft: #191c24;
+  --chalk: #f2ede4;
+  --stone: #8b8d92;
+  --stone-dim: #747780;
+  --ember: #e4633a;
+
+  /* Cabinet chrome. Cyan reads as "screen", ember stays the action colour. */
+  --neon: #37e0ff;
+  --neon-dim: #1b6a86;
+  --bezel: #0b0e15;
+  --bezel-seam: #1b2432;
+
+  --type-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --type-pixel: var(--font-pixel), ui-monospace, "SFMono-Regular", monospace;
+
+  background-color: var(--ground);
+  color: var(--chalk);
+  display: grid;
+  font-family: var(--type-sans);
+  /* Bar, cabinet, controls — the cabinet takes everything that is left. */
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 100svh;
+  padding: clamp(0.75rem, 2vw, 1.5rem);
+  gap: clamp(0.75rem, 1.6vw, 1.25rem);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------------------------------------------ bar */
+
+.bar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  justify-content: space-between;
+}
+
+.back {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--chalk);
+  display: inline-flex;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  min-height: 40px;
+  padding-inline: 1rem;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+.back:hover {
+  background-color: rgb(242 237 228 / 8%);
+  border-color: rgb(242 237 228 / 45%);
+}
+
+.title {
+  color: var(--stone);
+  font-family: var(--type-pixel);
+  font-size: 0.5625rem;
+  letter-spacing: 0.2em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.phase {
+  align-items: center;
+  color: var(--stone-dim);
+  display: inline-flex;
+  font-family: var(--type-pixel);
+  font-size: 0.5rem;
+  gap: 0.5rem;
+  letter-spacing: 0.2em;
+  margin: 0;
+  text-transform: uppercase;
+}
+.phase::before {
+  background-color: currentColor;
+  border-radius: 50%;
+  content: "";
+  height: 5px;
+  width: 5px;
+}
+.phase[data-phase="idle"] { color: var(--neon); }
+.phase[data-phase="playing"] { color: #7fb58a; }
+.phase[data-phase="failed"] { color: var(--ember); }
+@media (prefers-reduced-motion: no-preference) {
+  .phase[data-phase="preparing"]::before,
+  .phase[data-phase="starting"]::before { animation: pulse 1.6s ease-in-out infinite; }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* -------------------------------------------------------------- cabinet */
+
+/*
+  The bezel. A plastic-dark surround with an inner lip, so the screen reads as
+  recessed rather than as a rectangle painted on the page.
+*/
+.cabinet {
+  /*
+    A size container, so the stage below can compute an exact 16:9 box from it.
+    `aspect-ratio` alone is not enough on a stretched grid item: constraining
+    both axes with max-width/max-height leaves the ratio to be resolved in two
+    directions at once, and the box stops being 16:9 the moment one clamps.
+  */
+  container-type: size;
+  background-color: var(--bezel);
+  background-image: linear-gradient(180deg, #10141d 0%, #0b0e15 42%, #070910 100%);
+  border: 1px solid var(--bezel-seam);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 6%),
+    inset 0 -1px 0 rgb(0 0 0 / 60%),
+    0 24px 60px -30px rgb(0 0 0 / 90%);
+  display: grid;
+  min-height: 0;
+  padding: clamp(0.5rem, 1.4vw, 1rem);
+}
+
+/*
+  Sized to the game's own aspect ratio rather than to the chassis.
+
+  The runtime pins Phaser to FIT at 2048x1152, so any stage that is not exactly
+  16:9 gets letterboxed — and with a black stage that reads as black bars, up
+  to 131px a side at 1920x1080. Matching the ratio here means there is nothing
+  left for Phaser to letterbox. Fixed in CSS because the brief rules out
+  changing Phaser's behaviour.
+*/
+.stage {
+  aspect-ratio: 16 / 9;
+  /* The larger of the two fits: whichever axis runs out first. */
+  width: min(100cqw, 100cqh * 16 / 9);
+  margin: auto;
+  background-color: #000;
+  /* The inner lip: a dark ring plus a faint screen-edge glow. */
+  border: 1px solid #05070d;
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 1px rgb(55 224 255 / 8%),
+    inset 0 0 60px -12px rgb(55 224 255 / 14%),
+    inset 0 0 120px 20px rgb(0 0 0 / 70%);
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+  place-items: center;
+  position: relative;
+}
+
+.frame {
+  border: 0;
+  display: block;
+  height: 100%;
+  opacity: 0;
+  width: 100%;
+}
+/* Smooth entry: the surface fades up only once it is genuinely playable. */
+.frame[data-state="playing"] {
+  opacity: 1;
+  transition: opacity 0.7s ease;
+}
+
+/* ----------------------------------------------------------- CRT & trim */
+
+/*
+  Scanlines plus a vignette, over everything on the stage. `repeating-linear-
+  gradient` at 3px keeps the lines crisp at any zoom; the whole layer is kept
+  faint so it reads as ambience rather than as damage to the art.
+*/
+.crt {
+  /*
+    Vignette only. There were scanlines here — a 1px-in-3px dark line — and on
+    a large display they read as horizontal banding right across the flat areas
+    of the art, which is exactly what a pixel-art scene has a lot of. No
+    opacity was low enough to fix that: the artefact is the regular period, not
+    the darkness. The vignette carries the CRT depth on its own and has no
+    repeating structure to alias.
+  */
+  background-image:
+    radial-gradient(120% 90% at 50% 50%, transparent 52%, rgb(0 0 0 / 55%) 100%);
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 4;
+}
+
+/* Corner brackets, drawn as two borders each — no glyphs, no images. */
+.bracket {
+  border: 2px solid rgb(55 224 255 / 45%);
+  height: 18px;
+  pointer-events: none;
+  position: absolute;
+  width: 18px;
+  z-index: 5;
+}
+.bracket[data-corner="tl"] { border-right: 0; border-bottom: 0; left: 8px; top: 8px; }
+.bracket[data-corner="tr"] { border-left: 0; border-bottom: 0; right: 8px; top: 8px; }
+.bracket[data-corner="bl"] { border-right: 0; border-top: 0; bottom: 8px; left: 8px; }
+.bracket[data-corner="br"] { border-left: 0; border-top: 0; bottom: 8px; right: 8px; }
+
+/* -------------------------------------------------------------- overlays */
+
+.overlay {
+  align-content: center;
+  background-color: rgb(9 10 15 / 92%);
+  display: grid;
+  gap: 0.6rem;
+  inset: 0;
+  justify-items: center;
+  padding: 2rem;
+  position: absolute;
+  text-align: center;
+  z-index: 2;
+}
+
+.overlayLabel {
+  color: var(--ember);
+  font-family: var(--type-pixel);
+  font-size: 0.5rem;
+  letter-spacing: 0.2em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.overlayTitle {
+  font-size: clamp(1.15rem, 2.4vw, 1.6rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.overlayNote {
+  color: var(--stone);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 44ch;
+}
+
+.overlayActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.primary,
+.secondary {
+  align-items: center;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--type-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  min-height: 44px;
+  padding-inline: 1.25rem;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+.primary {
+  background-color: var(--ember);
+  border: 0;
+  color: #0b0b0d;
+}
+.primary:hover { background-color: #f0724a; }
+.secondary {
+  background-color: rgb(242 237 228 / 7%);
+  border: 1px solid rgb(242 237 228 / 30%);
+  color: var(--chalk);
+}
+.secondary:hover { background-color: rgb(242 237 228 / 14%); }
+
+/* Three stepped blocks — pixel cadence rather than a spinner. */
+.loader {
+  display: flex;
+  gap: 4px;
+}
+.loader i {
+  background-color: var(--stone-dim);
+  display: block;
+  height: 6px;
+  width: 6px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .loader i { animation: step 1.1s steps(1, end) infinite; }
+  .loader i:nth-child(2) { animation-delay: 0.14s; }
+  .loader i:nth-child(3) { animation-delay: 0.28s; }
+}
+@keyframes step {
+  0%, 66% { background-color: var(--stone-dim); }
+  33% { background-color: var(--ember); }
+}
+
+/* --------------------------------------------------------------- splash */
+
+/*
+  The attract screen. It fills the stage so there is no dead black space, and
+  scrolls internally on a short viewport rather than pushing the cabinet open.
+*/
+.splash {
+  /* `safe` keeps the top reachable once the content outgrows the stage. A
+     two-line fallback is pointless here: Lightning CSS dedupes it down to this
+     one declaration, and engines without `safe` simply top-align instead. */
+  align-content: safe center;
+  background-image:
+    radial-gradient(90% 70% at 50% 42%, rgb(55 224 255 / 9%) 0%, transparent 70%),
+    linear-gradient(180deg, #070910 0%, #05070d 100%);
+  display: grid;
+  gap: 0.75rem;
+  inset: 0;
+  justify-items: center;
+  overflow-y: auto;
+  padding: clamp(1.25rem, 3vw, 2.25rem);
+  position: absolute;
+  text-align: center;
+  z-index: 3;
+}
+
+/* Key art in a pixel frame: hard edges, stepped inset, no soft radius. */
+.art {
+  border: 2px solid rgb(55 224 255 / 30%);
+  box-shadow:
+    0 0 0 4px #05070d,
+    0 0 0 5px rgb(55 224 255 / 14%),
+    0 18px 50px -24px rgb(0 0 0 / 100%);
+  line-height: 0;
+  max-width: min(100%, 34rem);
+  position: relative;
+}
+
+.artImage {
+  aspect-ratio: 16 / 9;
+  display: block;
+  height: auto;
+  object-fit: cover;
+  width: 100%;
+}
+
+.splashLabel {
+  color: var(--neon);
+  font-family: var(--type-pixel);
+  font-size: 0.5rem;
+  letter-spacing: 0.24em;
+  margin: 0.35rem 0 0;
+  text-transform: uppercase;
+}
+
+.splashTitle {
+  color: var(--chalk);
+  font-size: clamp(1.3rem, 3.2vw, 2.1rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0;
+  max-width: 22ch;
+  text-wrap: balance;
+}
+
+.splashBlurb {
+  color: var(--stone);
+  font-size: 0.875rem;
+  line-height: 1.65;
+  margin: 0;
+  max-width: 52ch;
+}
+
+/* --------------------------------------------------------- start button */
+
+/*
+  The one thing on the screen that should pull the eye. Square corners and a
+  pixel face, with the glow carried on `box-shadow` so it can animate without
+  compositing the text.
+*/
+.start {
+  background-color: var(--ember);
+  position: relative;
+  border: 2px solid #ffb38a;
+  box-shadow:
+    0 0 0 3px rgb(228 99 58 / 16%),
+    0 0 26px -2px rgb(228 99 58 / 55%);
+  color: #120b07;
+  cursor: pointer;
+  font-family: var(--type-pixel);
+  font-size: clamp(0.6875rem, 1.5vw, 0.875rem);
+  letter-spacing: 0.16em;
+  margin-top: 0.6rem;
+  min-height: 52px;
+  padding: 0.9rem 2.25rem;
+  text-transform: uppercase;
+  transition: background-color 0.25s ease, box-shadow 0.25s ease, transform 0.12s ease;
+}
+.start:hover {
+  background-color: #ff7a4f;
+  box-shadow:
+    0 0 0 3px rgb(228 99 58 / 26%),
+    0 0 40px 2px rgb(228 99 58 / 75%),
+    0 0 90px 10px rgb(228 99 58 / 28%);
+}
+/* A real press, not just a colour change. */
+.start:active { transform: translateY(2px); }
+
+/*
+  The attract pulse lives on its own ring rather than on the button's own
+  box-shadow, which the hover state also sets — animating the same property
+  from two places means one of them has to be switched off, and the hand-off
+  jumps. As a separate layer the two simply compose.
+*/
+.start::after {
+  border: 2px solid rgb(255 179 138 / 70%);
+  content: "";
+  inset: -6px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .start::after { animation: attract 2.4s ease-in-out infinite; }
+}
+@keyframes attract {
+  0%, 100% { opacity: 0; transform: scale(0.98); }
+  50% { opacity: 0.55; transform: scale(1); }
+}
+
+.startHint {
+  align-items: center;
+  color: var(--stone-dim);
+  display: inline-flex;
+  font-family: var(--type-pixel);
+  font-size: 0.5rem;
+  gap: 0.45rem;
+  letter-spacing: 0.18em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------- click to play */
+
+.engage {
+  background-color: rgb(9 10 15 / 62%);
+  border: 0;
+  cursor: pointer;
+  display: grid;
+  gap: 0.4rem;
+  inset: 0;
+  place-content: center;
+  position: absolute;
+  z-index: 6;
+}
+.engageLabel {
+  background-color: var(--ember);
+  border-radius: 999px;
+  color: #0b0b0d;
+  font-family: var(--type-pixel);
+  font-size: 0.5625rem;
+  justify-self: center;
+  letter-spacing: 0.18em;
+  padding: 0.9rem 1.4rem;
+  text-transform: uppercase;
+}
+.engageNote {
+  color: var(--stone);
+  font-family: var(--type-pixel);
+  font-size: 0.5rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------- controls */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  justify-content: center;
+}
+
+.control {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.controlAction {
+  color: var(--stone);
+  font-family: var(--type-pixel);
+  font-size: 0.5rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/*
+  Tactile keycaps. The depth is a hard bottom shadow rather than a gradient,
+  which keeps the edges pixel-sharp at any scale.
+*/
+.keycap {
+  background-color: #11151d;
+  background-image: linear-gradient(180deg, #171d28 0%, #0e121a 100%);
+  border: 1px solid var(--neon-dim);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 rgb(55 224 255 / 18%),
+    0 2px 0 #05070d,
+    0 0 12px -4px rgb(55 224 255 / 55%);
+  color: #cfe6f5;
+  display: inline-block;
+  font-family: var(--type-pixel);
+  font-size: 0.5625rem;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  padding: 0.5rem 0.6rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.demo :is(a, button):focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--ember);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame[data-state="playing"] { transition: none; }
+}

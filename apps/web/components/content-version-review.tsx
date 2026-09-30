@@ -4,7 +4,11 @@ import { useActionState, useState } from "react";
 import { decideReviewAction, submitForReviewAction } from "@/app/(app)/projects/[id]/content-actions";
 import type { ContentVersion } from "@/lib/types";
 
-export function ContentVersionReview({ projectId, version }: { projectId: string; version: ContentVersion }) {
+export function ContentVersionReview({ projectId, version, playHref }: {
+  projectId: string;
+  version: ContentVersion;
+  playHref?: string;
+}) {
   const [submitState, submitAction, submitPending] = useActionState(submitForReviewAction, {});
   const [decisionState, decisionAction, decisionPending] = useActionState(decideReviewAction, {});
   const [submitRequestId] = useState(() => crypto.randomUUID());
@@ -19,6 +23,27 @@ export function ContentVersionReview({ projectId, version }: { projectId: string
       </div>
       <h3>{version.title}</h3>
       {typeof version.content.synopsis === "string" ? <p>{version.content.synopsis}</p> : null}
+
+      {/*
+        The only durable way back into a generated world. A generation job id
+        lives solely in the URL the generate flow redirects to, and the platform
+        API cannot list a project's jobs — so once that tab is gone the job page
+        is unreachable. Versions are listed here permanently, so the manifest is
+        addressed by version instead.
+      */}
+      {version.content.version === "playable-game-content/v1" ? (
+        <a
+          className="button"
+          href={playHref ?? `/playable?manifest=${encodeURIComponent(
+            `/api/projects/${encodeURIComponent(projectId)}` +
+              `/content-versions/${encodeURIComponent(version.id)}/manifest`,
+          )}`}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Play World
+        </a>
+      ) : null}
 
       {version.canSubmitForReview ? (
         <form action={submitAction} className="review-form">
