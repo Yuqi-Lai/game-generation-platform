@@ -3,20 +3,30 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { contentPackAction } from "@/app/(app)/projects/[id]/pack-actions";
+import { useProjectRealtime } from "@/lib/project-realtime";
 import type { ContentPack, ContentVersion } from "@/lib/types";
 
-export function ContentPackManager({ projectId, packs, approvedVersions, canManage }: {
+export function ContentPackManager({ projectId, packs, approvedVersions, canManage, realtimeEnabled = true }: {
   projectId: string;
   packs: ContentPack[];
   approvedVersions: ContentVersion[];
   canManage: boolean;
+  realtimeEnabled?: boolean;
 }) {
   const router = useRouter();
+  const { connected, connectionEpoch, subscribe } = useProjectRealtime(projectId, realtimeEnabled);
+  useEffect(() => subscribe((event) => {
+    if (!realtimeEnabled) return;
+    if (event.eventType === "content.pack.updated") router.refresh();
+  }), [realtimeEnabled, subscribe, router]);
   useEffect(() => {
-    if (!packs.some((pack) => pack.status === "EXPORTING")) return;
+    if (realtimeEnabled && connectionEpoch > 0) router.refresh();
+  }, [realtimeEnabled, connectionEpoch, router]);
+  useEffect(() => {
+    if (!realtimeEnabled || connected || !packs.some((pack) => pack.status === "EXPORTING")) return;
     const timer = window.setInterval(() => router.refresh(), 2000);
     return () => window.clearInterval(timer);
-  }, [packs, router]);
+  }, [realtimeEnabled, packs, connected, router]);
 
   return (
     <section className="pack-workspace">
