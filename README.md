@@ -4,6 +4,8 @@
 
 ### [▶ Open the live site](https://game-generation-platform.vercel.app)
 
+<br>
+
 ![Landing](.github/assets/01-hero.png)
 
 ---
